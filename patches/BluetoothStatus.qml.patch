@@ -1,0 +1,46 @@
+--- /home/arhaansh/.config/quickshell/ii/services/BluetoothStatus.qml.bak-preclaude	2026-09-18 03:58:01.950509091 +0530
++++ /home/arhaansh/.config/quickshell/ii/services/BluetoothStatus.qml	2026-09-18 03:58:01.973911736 +0530
+@@ -15,20 +15,38 @@
+     readonly property int activeDeviceCount: Bluetooth.defaultAdapter?.devices.values.filter(device => device.connected).length ?? 0
+     readonly property bool connected: Bluetooth.devices.values.some(d => d.connected)
+ 
++    // A device whose "name" is just its own address has no real name to show.
++    // BlueZ renders these with dashes (5A-71-2B-...), but accept colons too.
++    function isUnnamed(device) {
++        const macRegex = /^([0-9A-Fa-f]{2}[-:]){5}[0-9A-Fa-f]{2}$/;
++        return !device.name || macRegex.test(device.name);
++    }
++
++    // Hide nameless, unpaired devices from the scan list. Nearby phones and
++    // watches broadcast BLE with rotating random addresses and no name, which
++    // buries the handful of devices you can actually pair with. Paired and
++    // connected devices are never hidden, whatever they are called.
++    property bool hideUnnamedDevices: true
++
+     function sortFunction(a, b) {
+         // Ones with meaningful names before MAC addresses
+-        const macRegex = /^([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}$/;
+-        const aIsMac = macRegex.test(a.name);
+-        const bIsMac = macRegex.test(b.name);
++        const aIsMac = root.isUnnamed(a);
++        const bIsMac = root.isUnnamed(b);
+         if (aIsMac !== bIsMac)
+             return aIsMac ? 1 : -1;
+ 
+         // Alphabetical by name
+-        return a.name.localeCompare(b.name);
++        return (a.name ?? "").localeCompare(b.name ?? "");
+     }
+     property list<var> connectedDevices: Bluetooth.devices.values.filter(d => d.connected).sort(sortFunction)
+     property list<var> pairedButNotConnectedDevices: Bluetooth.devices.values.filter(d => d.paired && !d.connected).sort(sortFunction)
+-    property list<var> unpairedDevices: Bluetooth.devices.values.filter(d => !d.paired && !d.connected).sort(sortFunction)
++    property list<var> unpairedDevices: Bluetooth.devices.values
++        .filter(d => !d.paired && !d.connected)
++        .filter(d => !(root.hideUnnamedDevices && root.isUnnamed(d)))
++        .sort(sortFunction)
++    readonly property int hiddenUnnamedCount: Bluetooth.devices.values
++        .filter(d => !d.paired && !d.connected && root.isUnnamed(d)).length
++
+     property list<var> friendlyDeviceList: [
+         ...connectedDevices,
+         ...pairedButNotConnectedDevices,

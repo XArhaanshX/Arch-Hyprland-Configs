@@ -1,0 +1,6 @@
+# glow — use the matugen-generated Material You style
+style: "/home/arhaansh/.config/glow/matugen.json"
+pager: true
+width: 100
+all: true
+mouse: false

@@ -1,0 +1,16 @@
+[Unit]
+Description=Reconnect trusted Bluetooth audio device when it comes back
+Documentation=man:bluetoothd(8)
+After=bluetooth.target
+Wants=bluetooth.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/bt-autoconnect
+# BlueZ may not be on the bus yet at login, and the adapter can disappear
+# across suspend; just come back rather than giving up.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

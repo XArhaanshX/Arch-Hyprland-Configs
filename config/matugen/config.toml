@@ -1,0 +1,70 @@
+[config]
+version_check = false
+
+[templates.m3colors]
+input_path = '~/.config/matugen/templates/colors.json'
+output_path = '~/.local/state/quickshell/user/generated/colors.json'
+
+[templates.hyprland]
+input_path = '~/.config/matugen/templates/hyprland/colors.lua'
+output_path = '~/.config/hypr/hyprland/colors.lua'
+
+[templates.hyprlock]
+input_path = '~/.config/matugen/templates/hyprland/hyprlock-colors.conf'
+output_path = '~/.config/hypr/hyprlock/colors.conf'
+
+[templates.fuzzel]
+input_path = '~/.config/matugen/templates/fuzzel/fuzzel_theme.ini'
+output_path = '~/.config/fuzzel/fuzzel_theme.ini'
+
+[templates.gtk3]
+input_path = '~/.config/matugen/templates/gtk-3.0/gtk.css'
+output_path = '~/.config/gtk-3.0/gtk.css'
+
+[templates.gtk4]
+input_path = '~/.config/matugen/templates/gtk-4.0/gtk.css'
+output_path = '~/.config/gtk-4.0/gtk.css'
+
+[templates.kde_colors]
+input_path = '~/.config/matugen/templates/kde/color.txt'
+output_path = '~/.local/state/quickshell/user/generated/color.txt'
+
+[templates.wallpaper]
+input_path = '~/.config/matugen/templates/wallpaper.txt'
+output_path = '~/.local/state/quickshell/user/generated/wallpaper/path.txt'
+
+# ── Terminal-side apps (added) ──────────────────────────────────────────
+
+[templates.btop]
+input_path = '~/.config/matugen/templates/btop/matugen.theme'
+output_path = '~/.config/btop/themes/matugen.theme'
+
+[templates.cava]
+input_path = '~/.config/matugen/templates/cava/config'
+output_path = '~/.config/cava/config'
+post_hook = 'pkill -USR1 -x cava || true'
+
+[templates.fzf]
+input_path = '~/.config/matugen/templates/fzf/fzf-matugen.fish'
+output_path = '~/.config/fish/conf.d/fzf-matugen.fish'
+
+[templates.bat]
+input_path = '~/.config/matugen/templates/bat/matugen.tmTheme'
+output_path = '~/.config/bat/themes/matugen.tmTheme'
+post_hook = 'bat cache --build >/dev/null 2>&1 || true'
+
+[templates.yazi]
+input_path = '~/.config/matugen/templates/yazi/theme.toml'
+output_path = '~/.config/yazi/theme.toml'
+
+[templates.lazygit]
+input_path = '~/.config/matugen/templates/lazygit/config.yml'
+output_path = '~/.config/lazygit/config.yml'
+
+[templates.glow]
+input_path = '~/.config/matugen/templates/glow/matugen.json'
+output_path = '~/.config/glow/matugen.json'
+
+[templates.mangohud]
+input_path = '~/.config/matugen/templates/mangohud/MangoHud.conf'
+output_path = '~/.config/MangoHud/MangoHud.conf'

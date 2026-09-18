@@ -1,0 +1,33 @@
+--- /home/arhaansh/.config/quickshell/ii/services/Notifications.qml.bak-preclaude	2026-09-18 04:27:52.561686848 +0530
++++ /home/arhaansh/.config/quickshell/ii/services/Notifications.qml	2026-09-18 04:27:52.586862245 +0530
+@@ -74,6 +74,30 @@
+     }
+ 
+     property bool silent: false
++
++    // Expose do-not-disturb over IPC so scripts can reach it (the quick
++    // toggle in the sidebar is otherwise the only way to set it).
++    //   qs -c ii ipc call notifications silence
++    //   qs -c ii ipc call notifications unsilence
++    IpcHandler {
++        target: "notifications"
++
++        function silence(): void {
++            root.silent = true;
++        }
++
++        function unsilence(): void {
++            root.silent = false;
++        }
++
++        function toggleSilence(): void {
++            root.silent = !root.silent;
++        }
++
++        function isSilent(): string {
++            return root.silent ? "true" : "false";
++        }
++    }
+     property int unread: 0
+     property var filePath: Directories.notificationsPath
+     property list<Notif> list: []

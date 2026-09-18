@@ -1,0 +1,15 @@
+[Unit]
+Description=EasyEffects audio processing
+After=pipewire.service wireplumber.service
+Wants=pipewire.service wireplumber.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/easyeffects --gapplication-service
+# Deliberately does NOT re-route the default sink at login. Auto-routing at
+# startup risks total silence if the forward target is gone; run `fx on` instead.
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

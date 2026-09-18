@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Theatre mode: strip the desktop down for watching something.
+#
+#   theatre              toggle
+#   theatre on           enter
+#   theatre off          leave
+#   theatre status       show state
+#   theatre run mpv FILE enter, run the command, leave when it exits
+#
+# What it changes, and puts back afterwards:
+#   * hides the bar
+#   * silences notifications (do-not-disturb)
+#   * disables the night-light colour shift, so colours are accurate
+#   * inhibits idle lock / screen blank / suspend
+#
+# Cursor hiding is deliberately not here: these dots use Hyprland's Lua
+# config parser, which rejects `hyprctl keyword`, and mpv/browsers already
+# hide the cursor themselves in fullscreen.
+#
+# Every original value is saved on entry and restored on exit, so leaving
+# theatre mode returns the desktop exactly as it was rather than to defaults.
+set -uo pipefail
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/theatre"
+STATE="$STATE_DIR/saved"
+INHIBIT_PID="$STATE_DIR/inhibit.pid"
+mkdir -p "$STATE_DIR"
+
+QS=(qs -c ii ipc call)
+
+active() { [[ -f "$STATE" ]]; }
+
+enter() {
+    if active; then echo "already in theatre mode"; return 0; fi
+
+    # --- save current state -------------------------------------------------
+    local temp silent
+    temp=$(hyprctl hyprsunset temperature 2>/dev/null | tr -dc '0-9')
+    silent=$("${QS[@]}" notifications isSilent 2>/dev/null | tr -d '[:space:]')
+    {
+        echo "temp=${temp:-5000}"
+        echo "silent=${silent:-false}"
+    } > "$STATE"
+
+    # --- apply --------------------------------------------------------------
+    "${QS[@]}" bar close >/dev/null 2>&1
+    "${QS[@]}" notifications silence >/dev/null 2>&1
+    hyprctl hyprsunset identity >/dev/null 2>&1
+
+    # Hold an idle/sleep inhibitor for as long as theatre mode is on. hypridle
+    # honours logind inhibitors, so this stops the 5-minute lock, the 10-minute
+    # screen blank and the 15-minute suspend from firing mid-film.
+    setsid systemd-inhibit --what=idle:sleep:handle-lid-switch \
+        --who="theatre" --why="watching something" \
+        sleep infinity >/dev/null 2>&1 &
+    echo $! > "$INHIBIT_PID"
+
+    echo "theatre mode ON  — bar hidden, notifications silenced, idle inhibited"
+}
+
+leave() {
+    if ! active; then echo "not in theatre mode"; return 0; fi
+
+    local temp silent
+    temp=$(grep -oP '^temp=\K.*'   "$STATE" 2>/dev/null)
+    silent=$(grep -oP '^silent=\K.*' "$STATE" 2>/dev/null)
+
+    if [[ -f "$INHIBIT_PID" ]]; then
+        kill "$(cat "$INHIBIT_PID")" 2>/dev/null
+        rm -f "$INHIBIT_PID"
+    fi
+
+    "${QS[@]}" bar open >/dev/null 2>&1
+    # Only un-silence if it was not already silenced before we started.
+    if [[ "$silent" != "true" ]]; then
+        "${QS[@]}" notifications unsilence >/dev/null 2>&1
+    fi
+    [[ -n "${temp:-}" ]] && hyprctl hyprsunset temperature "$temp" >/dev/null 2>&1
+
+    rm -f "$STATE"
+    echo "theatre mode OFF — desktop restored"
+}
+
+case "${1:-toggle}" in
+    on)     enter ;;
+    off)    leave ;;
+    toggle) active && leave || enter ;;
+    run)
+        shift
+        [[ $# -gt 0 ]] || { echo "usage: theatre run <command...>" >&2; exit 1; }
+        enter
+        trap leave EXIT INT TERM
+        "$@"
+        ;;
+    status)
+        if active; then
+            echo "theatre mode : ON"
+            sed 's/^/  saved /' "$STATE"
+            if [[ -f "$INHIBIT_PID" ]] && kill -0 "$(cat "$INHIBIT_PID")" 2>/dev/null; then
+                echo "  idle inhibitor: held"
+            else
+                echo "  idle inhibitor: MISSING"
+            fi
+        else
+            echo "theatre mode : OFF"
+        fi
+        ;;
+    *) sed -n '3,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

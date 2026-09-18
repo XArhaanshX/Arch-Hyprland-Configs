@@ -1,0 +1,198 @@
+#!/usr/bin/env python3
+"""
+Reconnect a trusted Bluetooth audio device the moment it comes back.
+
+Why this exists: when you power on Sony headphones they page the laptop
+themselves, and BlueZ accepts because the device is Trusted. Usually the
+policy plugin then brings up A2DP on its own and nothing here is needed.
+Occasionally only the ACL link comes up and the audio profile doesn't
+follow, leaving the device "connected" but silent with no sink.
+
+This watches D-Bus for that case and calls Connect() to finish the job.
+
+It is event-driven, not polling: it reacts to BlueZ property changes, so it
+costs nothing while idle and never wakes the radio on its own. A device that
+is switched off simply produces no events.
+
+  bt-autoconnect                 # watch the default MAC below
+  bt-autoconnect AA:BB:CC:..     # watch a specific device
+"""
+
+import os
+import subprocess
+import sys
+
+import gi
+gi.require_version("GLib", "2.0")
+from gi.repository import Gio, GLib  # noqa: E402
+
+DEFAULT_MAC = os.environ.get("BT_AUTOCONNECT_MAC", "58:18:62:A1:FE:C7")
+
+# Give the profile a moment to come up by itself before intervening, so we
+# don't race BlueZ's own policy plugin and cause a connect/disconnect flap.
+SETTLE_SECONDS = 6
+
+
+def log(msg):
+    print(f"[bt-autoconnect] {msg}", flush=True)
+
+
+class Watcher:
+    def __init__(self, mac):
+        self.mac = mac.upper()
+        self.path = "/org/bluez/hci0/dev_" + self.mac.replace(":", "_")
+        self.pending = None
+        self.bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+
+        self.bus.signal_subscribe(
+            "org.bluez", "org.freedesktop.DBus.Properties",
+            "PropertiesChanged", self.path, None,
+            Gio.DBusSignalFlags.NONE, self.on_props, None,
+        )
+        # InterfacesAdded fires when the device object reappears after having
+        # been removed entirely (adapter reset, or the device aged out).
+        self.bus.signal_subscribe(
+            "org.bluez", "org.freedesktop.DBus.ObjectManager",
+            "InterfacesAdded", "/", None,
+            Gio.DBusSignalFlags.NONE, self.on_added, None,
+        )
+        log(f"watching {self.mac}")
+        if self.has_sink():
+            log("already connected with audio")
+
+    def prop(self, name):
+        try:
+            v = self.bus.call_sync(
+                "org.bluez", self.path, "org.freedesktop.DBus.Properties",
+                "Get", GLib.Variant("(ss)", ("org.bluez.Device1", name)),
+                None, Gio.DBusCallFlags.NONE, 3000, None,
+            )
+            return v.unpack()[0]
+        except GLib.Error:
+            return None
+
+    def has_sink(self):
+        """True when the audio profile is actually up, not just the ACL link."""
+        try:
+            objs = self.bus.call_sync(
+                "org.bluez", "/", "org.freedesktop.DBus.ObjectManager",
+                "GetManagedObjects", None, None,
+                Gio.DBusCallFlags.NONE, 5000, None,
+            ).unpack()[0]
+        except GLib.Error:
+            return False
+        for path, ifaces in objs.items():
+            if path.startswith(self.path) and "org.bluez.MediaTransport1" in ifaces:
+                return True
+        return False
+
+    def on_added(self, *args):
+        path = args[5][0]
+        if path.startswith(self.path):
+            self.schedule()
+
+    def on_props(self, *args):
+        iface, changed, _ = args[5]
+        if iface != "org.bluez.Device1":
+            return
+        if "Connected" in changed:
+            state = "up" if changed["Connected"] else "down"
+            log(f"link {state}")
+            if changed["Connected"]:
+                self.schedule()
+            else:
+                self.restore_sink()
+
+    def schedule(self):
+        if self.pending is not None:
+            GLib.source_remove(self.pending)
+        self.pending = GLib.timeout_add_seconds(SETTLE_SECONDS, self.settle)
+
+    def settle(self):
+        self.pending = None
+        if not self.prop("Connected"):
+            return False
+        if self.has_sink():
+            log("audio profile up on its own")
+            self.reroute()
+            return False
+        log("link up but no audio profile — calling Connect()")
+        try:
+            self.bus.call_sync(
+                "org.bluez", self.path, "org.bluez.Device1", "Connect",
+                None, None, Gio.DBusCallFlags.NONE, 20000, None,
+            )
+            log("connected")
+        except GLib.Error as e:
+            log(f"connect failed: {e.message}")
+        self.reroute()
+        return False
+
+    @staticmethod
+    def _default_sink():
+        try:
+            r = subprocess.run(["pactl", "get-default-sink"], timeout=5,
+                               capture_output=True, text=True)
+            return r.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return ""
+
+    @staticmethod
+    def _effects_active():
+        """True only when EasyEffects is running AND not bypassed."""
+        try:
+            r = subprocess.run(["easyeffects", "-b", "3"], timeout=5,
+                               capture_output=True, text=True)
+            return r.stdout.strip() == "2"
+        except (OSError, subprocess.SubprocessError):
+            return False
+
+    def reroute(self):
+        """Re-point the default sink at EasyEffects, but only if it is in use.
+
+        WirePlumber makes a freshly connected Bluetooth sink the default,
+        which routes audio around the effects chain. We only pull it back if
+        the user actually has effects switched on -- routing through
+        EasyEffects when it is not running is what produces silence.
+        """
+        fx = os.path.expanduser("~/.local/bin/fx")
+        if not os.access(fx, os.X_OK) or not self._effects_active():
+            return
+        try:
+            subprocess.run([fx, "route"], timeout=15,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            log("re-routed audio through easyeffects")
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    def restore_sink(self):
+        """On disconnect, get off the EasyEffects sink.
+
+        If the default sink is still easyeffects_sink while the device it
+        forwarded to has gone away, every output goes silent -- speakers
+        included. This is the failure that motivated the check.
+        """
+        if "easyeffects" not in self._default_sink():
+            return
+        fx = os.path.expanduser("~/.local/bin/fx")
+        if not os.access(fx, os.X_OK):
+            return
+        try:
+            subprocess.run([fx, "off"], timeout=15,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            log("device gone — moved audio back to a real sink")
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+
+def main():
+    mac = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_MAC
+    Watcher(mac)
+    try:
+        GLib.MainLoop().run()
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,5 @@
+--theme="matugen"
+--style="numbers,changes,header-filename"
+--italic-text=always
+--paging=auto
+--tabs=4

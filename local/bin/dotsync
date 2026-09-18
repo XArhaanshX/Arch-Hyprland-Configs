@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# Sync the tracked Linux configs into the git repo, commit and push.
+#
+#   dotsync             copy + commit + push
+#   dotsync --no-push   copy + commit only
+#   dotsync --dry       show what would change, touch nothing
+#
+# Only hand-written files are tracked. Anything matugen generates is
+# deliberately excluded -- the templates are the source of truth, and the
+# generated output changes on every wallpaper switch, which would turn the
+# history into noise.
+set -uo pipefail
+
+REPO="${DOTSYNC_REPO:-$HOME/Projects/Arch-Hyprland-Configs}"
+DRY=0
+PUSH=1
+for a in "$@"; do
+    case "$a" in
+        --dry)     DRY=1 ;;
+        --no-push) PUSH=0 ;;
+    esac
+done
+
+# tracked path -> destination inside the repo
+FILES=(
+  # --- theming: matugen templates (sources, not generated output) ---
+  ".config/matugen/config.toml"
+  ".config/matugen/README.md"
+  ".config/matugen/templates/btop/matugen.theme"
+  ".config/matugen/templates/cava/config"
+  ".config/matugen/templates/fzf/fzf-matugen.fish"
+  ".config/matugen/templates/bat/matugen.tmTheme"
+  ".config/matugen/templates/yazi/theme.toml"
+  ".config/matugen/templates/lazygit/config.yml"
+  ".config/matugen/templates/glow/matugen.json"
+  ".config/matugen/templates/gtk-3.0/gtk.css"
+  ".config/matugen/templates/gtk-4.0/gtk.css"
+
+  # --- app configs ---
+  ".config/btop/btop.conf"
+  ".config/fastfetch/config.jsonc"
+  ".config/fastfetch/donut.txt"
+  ".config/bat/config"
+  ".config/glow/glow.yml"
+  ".config/kitty/kitty.conf"
+
+  # --- shell ---
+  ".config/fish/config.fish"
+  ".config/fish/conf.d/aesthetic.fish"
+  ".config/fish/conf.d/00-path.fish"
+  ".config/starship.toml"
+
+  # --- desktop / toolkit ---
+  ".config/gtk-3.0/settings.ini"
+  ".config/gtk-4.0/settings.ini"
+  ".config/xdg-desktop-portal/hyprland-portals.conf"
+
+  # --- audio ---
+  ".config/wireplumber/wireplumber.conf.d/51-bluez-ldac.conf"
+  ".local/share/easyeffects/output/headphones.json"
+
+  # --- services ---
+  ".config/systemd/user/bt-autoconnect.service"
+  ".config/systemd/user/easyeffects.service"
+
+  # --- scripts ---
+  ".local/bin/donut"
+  ".local/bin/fx"
+  ".local/bin/btpair"
+  ".local/bin/bt-autoconnect"
+  ".local/bin/theatre"
+  ".local/bin/dotsync"
+
+  # --- shell (quickshell) user settings ---
+  ".config/illogical-impulse/config.json"
+
+  # --- hyprland user overrides (the files dots updates do not touch) ---
+  ".config/hypr/custom/general.lua"
+  ".config/hypr/custom/keybinds.lua"
+  ".config/hypr/custom/env.lua"
+  ".config/hypr/custom/execs.lua"
+  ".config/hypr/custom/rules.lua"
+  ".config/hypr/custom/variables.lua"
+)
+
+# Upstream illogical-impulse files we patched. Stored as diffs rather than
+# whole files, because copying them wholesale would fight dots updates.
+PATCHED=(
+  ".config/quickshell/ii/services/BluetoothStatus.qml"
+  ".config/quickshell/ii/services/Notifications.qml"
+)
+
+[[ -d "$REPO/.git" ]] || { echo "no git repo at $REPO" >&2; exit 1; }
+
+changed=0
+for rel in "${FILES[@]}"; do
+    src="$HOME/$rel"
+    [[ -f "$src" ]] || continue
+    dst="$REPO/${rel#.}"          # .config/... -> config/...
+    dst="${dst/\/config\//\/config\/}"
+    if [[ $DRY -eq 1 ]]; then
+        if ! cmp -s "$src" "$dst" 2>/dev/null; then
+            echo "  would update: $rel"; changed=1
+        fi
+        continue
+    fi
+    mkdir -p "$(dirname "$dst")"
+    if ! cmp -s "$src" "$dst" 2>/dev/null; then changed=1; fi
+    cp -p "$src" "$dst"
+done
+
+# Regenerate patches for upstream files we modified.
+for rel in "${PATCHED[@]}"; do
+    src="$HOME/$rel"
+    bak="$src.bak-preclaude"
+    [[ -f "$src" && -f "$bak" ]] || continue
+    out="$REPO/patches/$(basename "$rel").patch"
+    if [[ $DRY -eq 1 ]]; then
+        echo "  would refresh patch: $(basename "$rel").patch"
+        continue
+    fi
+    mkdir -p "$(dirname "$out")"
+    diff -u "$bak" "$src" > "$out" 2>/dev/null || true
+done
+
+if [[ $DRY -eq 1 ]]; then
+    [[ $changed -eq 0 ]] && echo "  nothing to update"
+    exit 0
+fi
+
+cd "$REPO" || exit 1
+git add -A
+if git diff --cached --quiet; then
+    echo "no changes to commit"
+    exit 0
+fi
+
+summary=$(git diff --cached --name-only | sed 's|^|  |' | head -12)
+count=$(git diff --cached --name-only | wc -l)
+git commit -q -m "sync: update $count file(s)
+
+$(git diff --cached --name-only | sed 's|^|- |')" 2>/dev/null \
+  || git commit -q -m "sync: update $count file(s)"
+
+echo "committed $count file(s):"
+echo "$summary"
+
+if [[ $PUSH -eq 1 ]]; then
+    if git push 2>&1 | tail -3; then
+        echo "pushed."
+    else
+        echo "push failed — see auth notes in the README." >&2
+    fi
+fi

@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+"""
+The rotating ASCII donut (Andy Sloane's donut.c), in Python.
+
+Two modes:
+  donut                 animate it, spinning, until Ctrl-C
+  donut --frame         print one frame and exit (used as the fastfetch logo)
+
+Colour uses terminal palette slots 243/245/251/252/253, which the
+illogical-impulse dots remap to the wallpaper's Material palette — so the
+donut recolours with the wallpaper for free. --no-color disables it.
+"""
+
+import argparse
+import math
+import random
+import re
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+# Luminance ramp, dimmest -> brightest. Straight from donut.c.
+RAMP = ".,-~:;=!*#$@"
+
+ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+
+# Palette slots, dim -> bright. These are the ANSI indices the dots overwrite
+# with Material colours (245 outlineVariant, 252 secondaryContainer,
+# 253 secondary, 251 tertiary, 243 primary).
+COLOR_SLOTS = [245, 245, 252, 252, 253, 253, 251, 251, 243, 243, 243, 243]
+
+THETA_STEP = 0.07   # around the tube
+PHI_STEP = 0.02     # around the torus
+
+
+def render(cols, rows, a, b, color=True):
+    """Render one frame of the torus at rotation (a, b) as a list of lines."""
+    r1, r2, k2 = 1.0, 2.0, 5.0
+    # Character cells are about twice as tall as wide, so the horizontal
+    # scale is doubled to keep the donut circular rather than squashed.
+    # The divisor sets how much of the canvas the torus fills. 1.75 is the
+    # largest value that never clips the edges: swept across a full rotation
+    # in both axes, smaller divisors touch the border at some angles (1.60
+    # clips at 44% of angles, 1.45 at 81%).
+    yscale = rows / 1.75
+    xscale = yscale * 2.0
+    cx, cy = cols / 2.0, rows / 2.0
+
+    output = [" "] * (cols * rows)
+    zbuf = [0.0] * (cols * rows)
+
+    sin_a, cos_a = math.sin(a), math.cos(a)
+    sin_b, cos_b = math.sin(b), math.cos(b)
+
+    theta = 0.0
+    while theta < 2 * math.pi:
+        sin_t, cos_t = math.sin(theta), math.cos(theta)
+        theta += THETA_STEP
+
+        circle_x = r2 + r1 * cos_t   # point on the tube cross-section
+        circle_y = r1 * sin_t
+
+        phi = 0.0
+        while phi < 2 * math.pi:
+            sin_p, cos_p = math.sin(phi), math.cos(phi)
+            phi += PHI_STEP
+
+            # Depth, then the two rotated screen axes. Mirrors donut.c:
+            #   D = 1/(c*h*e + f*g + 5)
+            #   t = c*h*g - f*e
+            #   x = l*h*m - t*n ,  y = l*h*n + t*m
+            # where h=circle_x, f=circle_y, c/l = sin/cos(phi),
+            # e/g = sin/cos(A), n/m = sin/cos(B).
+            z = circle_x * sin_p * sin_a + circle_y * cos_a + k2
+            ooz = 1.0 / z   # one over z, for the depth buffer
+            t = circle_x * sin_p * cos_a - circle_y * sin_a
+
+            xp = int(cx + xscale * ooz * (circle_x * cos_p * cos_b - t * sin_b))
+            yp = int(cy + yscale * ooz * (circle_x * cos_p * sin_b + t * cos_b))
+            if not (0 <= xp < cols and 0 <= yp < rows):
+                continue
+
+            # Surface luminance: normal dotted with the light direction.
+            lum = ((circle_y * sin_a - sin_p * cos_t * cos_a) * cos_b
+                   - sin_p * cos_t * sin_a
+                   - circle_y * cos_a
+                   - cos_p * cos_t * sin_b)
+            if lum <= 0:
+                continue
+
+            idx = xp + cols * yp
+            if ooz > zbuf[idx]:
+                zbuf[idx] = ooz
+                n = int(lum * 8)
+                output[idx] = RAMP[min(n, len(RAMP) - 1)]
+
+    lines = []
+    for row in range(rows):
+        chunk = output[row * cols:(row + 1) * cols]
+        if not color:
+            lines.append("".join(chunk).rstrip())
+            continue
+        line, current = [], None
+        for ch in chunk:
+            if ch == " ":
+                if current is not None:
+                    line.append("\033[0m")
+                    current = None
+                line.append(" ")
+                continue
+            slot = COLOR_SLOTS[RAMP.index(ch)]
+            if slot != current:
+                line.append(f"\033[38;5;{slot}m")
+                current = slot
+            line.append(ch)
+        if current is not None:
+            line.append("\033[0m")
+        lines.append("".join(line))
+    return lines
+
+
+COLUMN_RE = re.compile(r"\033\[(\d+)G")
+
+
+def visible_len(line):
+    """Length of a line ignoring ANSI escapes (approximate: counts codepoints)."""
+    return len(ANSI_RE.sub("", COLUMN_RE.sub("", line)))
+
+
+def fetch_loop(args, color):
+    """Spin the donut with fastfetch's output held static beside it.
+
+    fastfetch renders once and exits, so its logo can never animate. Instead
+    we capture its module output a single time, then redraw only the donut
+    each frame and reposition the captured text next to it.
+    """
+    try:
+        proc = subprocess.run(
+            ["fastfetch", "--logo-type", "none", "--pipe", "false"],
+            capture_output=True, text=True, timeout=20,
+        )
+        info = proc.stdout.rstrip("\n").split("\n")
+    except (FileNotFoundError, subprocess.SubprocessError):
+        info = []
+
+    # Drop blank leading/trailing rows so the two blocks line up.
+    while info and not visible_len(info[0]):
+        info.pop(0)
+    while info and not visible_len(info[-1]):
+        info.pop()
+
+    term = shutil.get_terminal_size((100, 30))
+    cols = args.cols or 40
+    rows = args.rows or max(len(info), 16)
+    gap = 4
+    start_col = cols + gap + 1          # 1-indexed column where info begins
+    shift = start_col - 1
+
+    if term.columns < start_col + 20:   # too narrow to sit side by side
+        info = []
+        cols = args.cols or min(term.columns, 80)
+
+    # fastfetch positions values with absolute column escapes. Rewriting them
+    # to the shifted column keeps its alignment intact in the new frame;
+    # stripping them instead would collapse the key/value columns.
+    info = [COLUMN_RE.sub(lambda m: f"\033[{int(m.group(1)) + shift}G", ln)
+            for ln in info]
+
+    # Centre the shorter block against the taller one.
+    pad = max(0, (rows - len(info)) // 2)
+    info = [""] * pad + info
+    info += [""] * max(0, rows - len(info))
+
+    def restore(*_):
+        sys.stdout.write("\033[?25h\033[0m\n")
+        sys.stdout.flush()
+        os._exit(0)
+
+    signal.signal(signal.SIGINT, restore)
+    signal.signal(signal.SIGTERM, restore)
+
+    sys.stdout.write("\033[?25l\033[2J")
+    a = b = 0.0
+    delay = 1.0 / args.fps if args.fps > 0 else 0.0
+    try:
+        while True:
+            start = time.monotonic()
+            frame = render(cols, rows, a, b, color)
+            out = ["\033[H"]
+            for i in range(rows):
+                out.append("\033[K")
+                out.append(frame[i] if i < len(frame) else "")
+                if info[i]:
+                    out.append(f"\033[{start_col}G\033[0m")
+                    out.append(info[i])
+                out.append("\n" if i < rows - 1 else "")
+            sys.stdout.write("".join(out))
+            sys.stdout.flush()
+            a += 0.07
+            b += 0.03
+            time.sleep(max(0.0, delay - (time.monotonic() - start)))
+    except (KeyboardInterrupt, BrokenPipeError):
+        restore()
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=True)
+    ap.add_argument("--frame", action="store_true",
+                    help="print a single frame and exit")
+    ap.add_argument("--cols", type=int, default=0, help="width in characters")
+    ap.add_argument("--rows", type=int, default=0, help="height in lines")
+    ap.add_argument("-a", type=float, default=1.0, help="X rotation (--frame)")
+    ap.add_argument("-b", type=float, default=1.0, help="Z rotation (--frame)")
+    ap.add_argument("--trim", action="store_true",
+                    help="drop blank rows above/below the torus (--frame)")
+    ap.add_argument("--random", action="store_true",
+                    help="use a random rotation (--frame)")
+    ap.add_argument("--fetch", action="store_true",
+                    help="spin the donut beside live fastfetch output")
+    ap.add_argument("--fps", type=float, default=30.0)
+    ap.add_argument("--no-color", action="store_true")
+    args = ap.parse_args()
+
+    color = not args.no_color
+
+    if args.frame:
+        cols = args.cols or 38
+        rows = args.rows or 17
+        a, b = args.a, args.b
+        if args.random:
+            a = random.uniform(0, 2 * math.pi)
+            b = random.uniform(0, 2 * math.pi)
+        lines = render(cols, rows, a, b, color)
+        if args.trim:
+            # Strip fully blank rows top and bottom. Colour codes have to be
+            # removed before testing, or an all-space row still looks non-empty.
+            def blank(ln):
+                return not ANSI_RE.sub("", ln).strip()
+            while lines and blank(lines[0]):
+                lines.pop(0)
+            while lines and blank(lines[-1]):
+                lines.pop()
+        print("\n".join(lines))
+        return
+
+    if args.fetch:
+        fetch_loop(args, color)
+        return
+
+    term = shutil.get_terminal_size((80, 24))
+    cols = args.cols or min(term.columns, 80)
+    rows = args.rows or max(term.lines - 2, 10)
+
+    def restore(*_):
+        sys.stdout.write("\033[?25h\033[0m\n")  # show cursor, reset colour
+        sys.stdout.flush()
+        os._exit(0)
+
+    signal.signal(signal.SIGINT, restore)
+    signal.signal(signal.SIGTERM, restore)
+
+    sys.stdout.write("\033[?25l\033[2J")  # hide cursor, clear once
+    a = b = 0.0
+    delay = 1.0 / args.fps if args.fps > 0 else 0.0
+    try:
+        while True:
+            start = time.monotonic()
+            frame = render(cols, rows, a, b, color)
+            # Home the cursor rather than clearing, so it doesn't flicker.
+            sys.stdout.write("\033[H" + "\n".join(f"\033[K{ln}" for ln in frame))
+            sys.stdout.flush()
+            a += 0.07
+            b += 0.03
+            # Sleep only for the time left in the frame budget. Sleeping the
+            # full interval on top of render time caps the real rate well
+            # below --fps (a 24ms render + 100ms sleep is 8fps, not 10).
+            time.sleep(max(0.0, delay - (time.monotonic() - start)))
+    except (KeyboardInterrupt, BrokenPipeError):
+        restore()
+
+
+if __name__ == "__main__":
+    main()

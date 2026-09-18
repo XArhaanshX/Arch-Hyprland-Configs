@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Turn EasyEffects audio processing (crossfeed + EQ) on and off.
+#
+#   fx           toggle
+#   fx on        processing enabled
+#   fx off       processing bypassed
+#   fx status    show current state
+#   fx route     re-point audio through EasyEffects (after a BT reconnect)
+#   fx gui       open the EasyEffects window
+#
+# How this works: EasyEffects creates a virtual sink and forwards to the real
+# device, so apps have to output to `easyeffects_sink` or nothing is
+# processed. `fx route` (run automatically by `fx on`) sets that up and moves
+# any already-playing streams across.
+#
+# On/off then uses EasyEffects' global bypass rather than moving the default
+# sink around, so flipping it is instant and never interrupts playback.
+# Note EasyEffects 8 uses 1=bypass ON, 2=bypass OFF, 3=query -- not 0/1.
+set -uo pipefail
+
+PRESET="${FX_PRESET:-headphones}"
+
+command -v easyeffects >/dev/null || {
+    echo "easyeffects is not installed:  yay -S --needed easyeffects" >&2
+    exit 1
+}
+
+service_running() { pgrep -x easyeffects >/dev/null; }
+
+start_service() {
+    service_running && return 0
+    setsid easyeffects --gapplication-service >/dev/null 2>&1 &
+    for _ in $(seq 1 30); do
+        service_running && { sleep 1; return 0; }
+        sleep 0.15
+    done
+    return 1
+}
+
+# 1 = bypassed (effects off), 2 = active (effects on)
+bypass_state() { easyeffects -b 3 2>/dev/null | tr -d '[:space:]'; }
+
+ee_sink_exists() { pactl list sinks short 2>/dev/null | grep -q easyeffects_sink; }
+
+route_through_ee() {
+    ee_sink_exists || return 1
+    local cur
+    cur=$(pactl get-default-sink 2>/dev/null)
+    if [[ "$cur" != "easyeffects_sink" ]]; then
+        pactl set-default-sink easyeffects_sink >/dev/null 2>&1
+    fi
+    # Move anything already playing so it doesn't keep bypassing the chain.
+    local id
+    while read -r id _; do
+        [[ -n "$id" ]] && pactl move-sink-input "$id" easyeffects_sink >/dev/null 2>&1
+    done < <(pactl list sink-inputs short 2>/dev/null)
+    return 0
+}
+
+case "${1:-toggle}" in
+    on)
+        start_service || { echo "could not start easyeffects" >&2; exit 1; }
+        easyeffects -l "$PRESET" >/dev/null 2>&1
+        easyeffects -b 2 >/dev/null 2>&1          # 2 = bypass off = effects on
+        route_through_ee || echo "warning: easyeffects sink not present yet" >&2
+        echo "processing ON  — crossfeed + EQ (preset: $PRESET)"
+        ;;
+    off)
+        if service_running; then
+            easyeffects -b 1 >/dev/null 2>&1      # 1 = bypass on = effects off
+        fi
+        # Hand the default sink back to a real device. Leaving it pointed at
+        # easyeffects_sink is how you end up with total silence: if the device
+        # EasyEffects forwards to disappears (a Bluetooth headset powering
+        # off), audio goes into a sink that leads nowhere -- speakers included.
+        real=$(pactl list sinks short 2>/dev/null \
+               | awk '$2 !~ /easyeffects/ {print $2}' \
+               | grep -m1 bluez_output) || true
+        [[ -z "${real:-}" ]] && real=$(pactl list sinks short 2>/dev/null \
+               | awk '$2 !~ /easyeffects/ {print $2; exit}')
+        if [[ -n "${real:-}" ]]; then
+            pactl set-default-sink "$real" >/dev/null 2>&1
+            while read -r id _; do
+                [[ -n "$id" ]] && pactl move-sink-input "$id" "$real" >/dev/null 2>&1
+            done < <(pactl list sink-inputs short 2>/dev/null)
+            echo "processing OFF — clean passthrough (sink: $real)"
+        else
+            echo "processing OFF — clean passthrough"
+        fi
+        ;;
+    toggle)
+        if service_running && [[ "$(bypass_state)" == "2" ]]; then
+            exec "$0" off
+        else
+            exec "$0" on
+        fi
+        ;;
+    route)
+        start_service || exit 1
+        route_through_ee && echo "audio routed through easyeffects_sink" \
+                         || echo "easyeffects sink missing" >&2
+        ;;
+    status)
+        local_state=$(service_running && bypass_state || echo "-")
+        case "$local_state" in
+            2) echo "processing : ON (crossfeed + EQ)" ;;
+            1) echo "processing : OFF (bypassed)" ;;
+            *) echo "processing : service not running" ;;
+        esac
+        echo "preset     : $(easyeffects -a output 2>/dev/null | tr -d '[:space:]')"
+        echo "default sink: $(pactl get-default-sink 2>/dev/null)"
+        if [[ "$(pactl get-default-sink 2>/dev/null)" != "easyeffects_sink" ]]; then
+            echo "  ! audio is NOT going through EasyEffects — run: fx route"
+        elif ! service_running; then
+            echo "  !! default sink is easyeffects_sink but EasyEffects is NOT"
+            echo "     running — this means SILENCE. Run: fx off"
+        fi
+        pw-dump 2>/dev/null | grep -oE "ee_soe_[a-z]+" | sort -u | sed 's/^ee_soe_/plugin     : /'
+        ;;
+    gui)  setsid easyeffects >/dev/null 2>&1 & ;;
+    *)    sed -n '3,9p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+esac

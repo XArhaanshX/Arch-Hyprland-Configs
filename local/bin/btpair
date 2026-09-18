@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Scan until a device whose name matches a pattern appears, then pair,
+# trust and connect it.
+#
+#   btpair            # waits for anything matching XM6
+#   btpair WH-1000    # different pattern
+#   btpair XM6 120    # and a longer timeout
+#
+# Two things this works around:
+#
+#  * `bluetoothctl pairable on` and `agent on` only hold for the lifetime of
+#    that bluetoothctl process. Calling them as separate one-shot commands
+#    sets them and immediately drops them again, so the pairing itself has to
+#    happen inside a single session -- which is what phase 2 below does.
+#
+#  * Pairing mode on headphones lasts a couple of minutes, but a one-shot
+#    scan only watches a fixed window. Phase 1 keeps scanning until the
+#    device shows up.
+set -uo pipefail
+
+PATTERN="${1:-XM6}"
+TIMEOUT="${2:-90}"
+
+command -v bluetoothctl >/dev/null || { echo "bluetoothctl not found" >&2; exit 1; }
+
+echo "Scanning up to ${TIMEOUT}s for a device matching '${PATTERN}'."
+echo "Put the headphones in pairing mode now: power them OFF, then hold the"
+echo "power button ~7s until you hear \"Bluetooth pairing\". Ctrl-C to stop."
+echo
+
+# ---- phase 1: find the device -------------------------------------------
+bluetoothctl --timeout "$TIMEOUT" scan on >/dev/null 2>&1 &
+SCAN_PID=$!
+cleanup() { kill "$SCAN_PID" 2>/dev/null; }
+trap cleanup EXIT INT TERM
+
+MATCH=""
+for ((i = 0; i < TIMEOUT; i++)); do
+    MATCH=$(bluetoothctl devices 2>/dev/null | grep -i -- "$PATTERN" | head -1)
+    [[ -n "$MATCH" ]] && break
+    (( i % 10 == 0 && i > 0 )) && echo "  …${i}s, still looking"
+    sleep 1
+done
+cleanup
+
+if [[ -z "$MATCH" ]]; then
+    echo
+    echo "No device matching '${PATTERN}' appeared in ${TIMEOUT}s."
+    echo "Devices that did advertise a name:"
+    bluetoothctl devices 2>/dev/null \
+        | grep -avE '([0-9A-F]{2}:){5}[0-9A-F]{2} ([0-9A-F]{2}-){5}[0-9A-F]{2}$' \
+        | sed 's/^Device /  /'
+    echo
+    echo "If nothing is listed, the headphones are not in pairing mode, or are"
+    echo "still connected to your phone (turn Bluetooth off there and retry)."
+    exit 1
+fi
+
+MAC=$(awk '{print $2}' <<<"$MATCH")
+NAME=$(cut -d' ' -f3- <<<"$MATCH")
+echo
+echo "Found: ${NAME}  (${MAC})"
+echo "Pairing…"
+echo
+
+# ---- phase 2: pair inside ONE session ------------------------------------
+# agent/pairable state lives and dies with the bluetoothctl process, so every
+# step has to run in the same session. The sleeps let each command land.
+{
+    echo "power on";      sleep 1
+    echo "agent on";      sleep 1
+    echo "default-agent"; sleep 1
+    echo "pairable on";   sleep 1
+    echo "scan on";       sleep 3
+    echo "pair $MAC";     sleep 12
+    echo "trust $MAC";    sleep 2
+    echo "connect $MAC";  sleep 8
+    echo "scan off";      sleep 1
+    echo "quit"
+} | timeout 60 bluetoothctl 2>&1 \
+  | grep -aiE "successful|failed|already|not available|authentication|connected|paired|agent" \
+  | sed 's/^/  /' | tail -12
+
+echo
+echo "Result:"
+bluetoothctl info "$MAC" 2>/dev/null \
+    | grep -E "Name|Paired|Bonded|Trusted|Connected|Battery" | sed 's/^\s*/  /'
+
+if bluetoothctl info "$MAC" 2>/dev/null | grep -q "Connected: yes"; then
+    echo
+    echo "Connected. Routing audio…"
+    sleep 2
+    SINK=$(pactl list sinks short 2>/dev/null | awk '/bluez_output/{print $2; exit}')
+    if [[ -n "$SINK" ]]; then
+        pactl set-default-sink "$SINK" >/dev/null 2>&1
+        echo "  default sink -> $SINK"
+    fi
+fi

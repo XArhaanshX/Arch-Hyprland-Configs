@@ -1,0 +1,267 @@
+/*
+* GTK colors generated with Matugen
+* The source template is here: ~/.config/matugen/templates/gtk-3.0/gtk.css
+*
+* NOTE (local change): upstream only defined the libadwaita-style names below
+* under "Accents"/"Base surfaces"/"Popups". Plain GTK3 widgets — buttons,
+* entries, check/radio, scrollbars, menus, notebooks, treeviews — resolve
+* against the *classic* theme_* names instead, which were absent, so those
+* widgets kept whatever adw-gtk3 shipped and ignored the wallpaper. The
+* "Classic GTK3 widget colors" section below fixes that. Keep both sets.
+*/
+
+/* Accents */
+@define-color accent_color {{colors.primary.default.hex}};
+@define-color accent_fg_color {{colors.on_primary.default.hex}};
+@define-color accent_bg_color {{colors.primary.default.hex}};
+@define-color destructive_bg_color {{colors.error_container.default.hex}};
+@define-color destructive_fg_color {{colors.on_error_container.default.hex}};
+@define-color destructive_color {{colors.error.default.hex}};
+@define-color success_bg_color #374B3E;
+@define-color success_fg_color #D1E9D6;
+@define-color success_color #B5CCBA;
+/* Base surfaces */
+@define-color window_bg_color {{colors.background.default.hex}};
+@define-color window_fg_color {{colors.on_background.default.hex}};
+@define-color headerbar_bg_color {{colors.surface_container.default.hex}};
+@define-color headerbar_backdrop_color {{colors.surface_container.default.hex}};
+@define-color headerbar_fg_color {{colors.on_surface.default.hex}};
+@define-color card_bg_color {{colors.surface_container.default.hex}};
+@define-color card_fg_color {{colors.on_surface.default.hex}};
+@define-color sidebar_bg_color {{colors.surface_container.default.hex}};
+@define-color sidebar_fg_color {{colors.on_surface.default.hex}};
+@define-color secondary_sidebar_bg_color {{colors.surface_container_low.default.hex}};
+@define-color secondary_sidebar_fg_color {{colors.on_surface.default.hex}};
+@define-color sidebar_border_color @sidebar_bg_color;
+@define-color sidebar_backdrop_color @sidebar_bg_color;
+@define-color view_bg_color {{colors.surface_container_lowest.default.hex}};
+@define-color view_fg_color {{colors.on_surface.default.hex}};
+@define-color overview_bg_color {{colors.surface_container_lowest.default.hex}};
+@define-color overview_fg_color {{colors.on_surface.default.hex}};
+/* Popups */
+@define-color popover_bg_color {{colors.surface_container_highest.default.hex}};
+@define-color popover_fg_color {{colors.on_surface.default.hex}};
+@define-color dialog_bg_color {{colors.surface_container_high.default.hex}};
+@define-color dialog_fg_color {{colors.on_surface.default.hex}};
+
+/* ── Classic GTK3 widget colors (local addition) ──────────────────────── */
+
+/* Window chrome and labels */
+@define-color theme_bg_color {{colors.background.default.hex}};
+@define-color theme_fg_color {{colors.on_background.default.hex}};
+
+/* Entries, text views, list/tree backgrounds */
+@define-color theme_base_color {{colors.surface_container_lowest.default.hex}};
+@define-color theme_text_color {{colors.on_surface.default.hex}};
+@define-color content_view_bg {{colors.surface_container_lowest.default.hex}};
+@define-color text_view_bg {{colors.surface_container_lowest.default.hex}};
+
+/* Selection */
+@define-color theme_selected_bg_color {{colors.primary.default.hex}};
+@define-color theme_selected_fg_color {{colors.on_primary.default.hex}};
+
+/* Backdrop (unfocused window) variants */
+@define-color theme_unfocused_bg_color {{colors.background.default.hex}};
+@define-color theme_unfocused_fg_color {{colors.on_surface_variant.default.hex}};
+@define-color theme_unfocused_base_color {{colors.surface_container_lowest.default.hex}};
+@define-color theme_unfocused_text_color {{colors.on_surface_variant.default.hex}};
+@define-color theme_unfocused_selected_bg_color {{colors.primary_container.default.hex}};
+@define-color theme_unfocused_selected_fg_color {{colors.on_primary_container.default.hex}};
+
+/* Disabled states */
+@define-color insensitive_bg_color {{colors.surface_container.default.hex}};
+@define-color insensitive_fg_color {{colors.outline.default.hex}};
+@define-color insensitive_base_color {{colors.surface_container_low.default.hex}};
+
+/* Borders and separators */
+@define-color borders {{colors.outline_variant.default.hex}};
+@define-color unfocused_borders {{colors.outline_variant.default.hex}};
+
+/* Semantic */
+@define-color warning_color {{colors.tertiary.default.hex}};
+@define-color error_color {{colors.error.default.hex}};
+@define-color link_color {{colors.primary.default.hex}};
+@define-color visited_link_color {{colors.tertiary.default.hex}};
+@define-color placeholder_text_color {{colors.outline.default.hex}};
+
+/* Tooltips */
+@define-color tooltip_bg_color {{colors.inverse_surface.default.hex}};
+@define-color tooltip_fg_color {{colors.inverse_on_surface.default.hex}};
+
+/* Window-manager hints used by some GTK3 themes */
+@define-color wm_bg {{colors.surface_container.default.hex}};
+@define-color wm_bg_unfocused {{colors.surface_container.default.hex}};
+@define-color wm_title {{colors.on_surface.default.hex}};
+@define-color wm_unfocused_title {{colors.on_surface_variant.default.hex}};
+@define-color wm_highlight {{colors.outline_variant.default.hex}};
+@define-color wm_borders_edge {{colors.outline_variant.default.hex}};
+
+/* ── Accent overrides ─────────────────────────────────────────────────── */
+/*
+ * IMPORTANT: adw-gtk3 is compiled from SCSS with its accent baked in at build
+ * time. Unlike GTK4/libadwaita — where named colors resolve at runtime — the
+ * @define-color values above do NOT reach adw-gtk3's own rules. Anything that
+ * should follow the wallpaper has to be overridden explicitly here, or it
+ * stays Adwaita blue (the notebook tab indicator is the obvious tell).
+ *
+ * Colour only: no padding, margin, border-width or geometry, so app layouts
+ * are untouched.
+ */
+
+/* Text selection */
+selection,
+*:selected,
+*:selected:focus {
+	background-color: {{colors.primary_container.default.hex}};
+	color: {{colors.on_primary_container.default.hex}};
+}
+
+/* Selected rows in lists, sidebars, tree views */
+row:selected,
+list > row:selected,
+treeview.view:selected,
+iconview:selected,
+flowboxchild:selected {
+	background-color: {{colors.primary_container.default.hex}};
+	color: {{colors.on_primary_container.default.hex}};
+}
+
+/* Notebook tab indicator — the classic leftover-blue offender */
+notebook > header.top > tabs > tab:checked,
+notebook > header.top > tabs > tab.reorderable-page:checked {
+	box-shadow: inset 0 -3px {{colors.primary.default.hex}};
+	color: {{colors.primary.default.hex}};
+}
+notebook > header.bottom > tabs > tab:checked {
+	box-shadow: inset 0 3px {{colors.primary.default.hex}};
+	color: {{colors.primary.default.hex}};
+}
+notebook > header.left > tabs > tab:checked {
+	box-shadow: inset -3px 0 {{colors.primary.default.hex}};
+	color: {{colors.primary.default.hex}};
+}
+notebook > header.right > tabs > tab:checked {
+	box-shadow: inset 3px 0 {{colors.primary.default.hex}};
+	color: {{colors.primary.default.hex}};
+}
+
+/* StackSwitcher / view switcher */
+stackswitcher > button:checked,
+viewswitcher > button:checked {
+	color: {{colors.primary.default.hex}};
+	box-shadow: inset 0 -3px {{colors.primary.default.hex}};
+}
+
+/* Switches */
+switch:checked {
+	background-color: {{colors.primary.default.hex}};
+	border-color: {{colors.primary.default.hex}};
+}
+switch:checked > slider {
+	background-color: {{colors.on_primary.default.hex}};
+}
+
+/* Check boxes and radios */
+check:checked,
+check:indeterminate,
+radio:checked,
+radio:indeterminate,
+checkbutton check:checked,
+checkbutton check:indeterminate,
+radiobutton radio:checked {
+	background-color: {{colors.primary.default.hex}};
+	color: {{colors.on_primary.default.hex}};
+	border-color: {{colors.primary.default.hex}};
+	-gtk-icon-source: -gtk-icontheme("object-select-symbolic");
+}
+
+/* Accent buttons */
+button.suggested-action,
+button.suggested-action:hover,
+.suggested-action {
+	background-color: {{colors.primary.default.hex}};
+	background-image: none;
+	color: {{colors.on_primary.default.hex}};
+	border-color: {{colors.primary.default.hex}};
+}
+button.destructive-action,
+.destructive-action {
+	background-color: {{colors.error_container.default.hex}};
+	background-image: none;
+	color: {{colors.on_error_container.default.hex}};
+	border-color: {{colors.error_container.default.hex}};
+}
+
+/* Toggled / active toggle buttons */
+button:checked,
+button.toggle:checked {
+	background-color: {{colors.secondary_container.default.hex}};
+	background-image: none;
+	color: {{colors.on_secondary_container.default.hex}};
+}
+
+/* Sliders and scales */
+scale highlight,
+scale > trough > highlight,
+scale fill {
+	background-color: {{colors.primary.default.hex}};
+}
+scale > trough > slider,
+scale slider {
+	background-color: {{colors.primary.default.hex}};
+	border-color: {{colors.primary.default.hex}};
+}
+
+/* Progress and level indicators */
+progressbar progress,
+progressbar > trough > progress,
+levelbar block.filled {
+	background-color: {{colors.primary.default.hex}};
+}
+
+/* Entry focus */
+entry:focus,
+entry:focus-within,
+spinbutton:focus-within,
+searchentry:focus-within {
+	border-color: {{colors.primary.default.hex}};
+	box-shadow: inset 0 0 0 1px {{colors.primary.default.hex}};
+}
+
+/* Scrollbar slider */
+scrollbar slider {
+	background-color: {{colors.outline.default.hex}};
+}
+scrollbar slider:hover {
+	background-color: {{colors.on_surface_variant.default.hex}};
+}
+scrollbar slider:active {
+	background-color: {{colors.primary.default.hex}};
+}
+
+/* Links, spinners, focus rings */
+link,
+*:link,
+button.link {
+	color: {{colors.primary.default.hex}};
+}
+spinner {
+	color: {{colors.primary.default.hex}};
+}
+*:focus-visible {
+	outline-color: {{colors.primary.default.hex}};
+}
+
+/* Menu / popover hover */
+menuitem:hover,
+modelbutton:hover,
+popover.menu listview > row:hover {
+	background-color: {{colors.secondary_container.default.hex}};
+	color: {{colors.on_secondary_container.default.hex}};
+}
+
+/* Calendar + misc accents */
+calendar:selected {
+	background-color: {{colors.primary.default.hex}};
+	color: {{colors.on_primary.default.hex}};
+}
