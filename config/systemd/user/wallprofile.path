@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch the shell's wallpaper path file and re-apply the look profile
+
+[Path]
+# Written by switchwall.sh on every wallpaper change.
+PathModified=%h/.local/state/quickshell/user/generated/wallpaper/path.txt
+Unit=wallprofile.service
+
+[Install]
+WantedBy=default.target

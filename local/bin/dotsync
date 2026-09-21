@@ -62,6 +62,8 @@ FILES=(
   # --- services ---
   ".config/systemd/user/bt-autoconnect.service"
   ".config/systemd/user/easyeffects.service"
+  ".config/systemd/user/wallprofile.path"
+  ".config/systemd/user/wallprofile.service"
 
   # --- scripts ---
   ".local/bin/donut"
@@ -69,6 +71,7 @@ FILES=(
   ".local/bin/btpair"
   ".local/bin/bt-autoconnect"
   ".local/bin/theatre"
+  ".local/bin/wallprofile"
   ".local/bin/dotsync"
 
   # --- shell (quickshell) user settings ---

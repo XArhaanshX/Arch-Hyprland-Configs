@@ -1,0 +1,6 @@
+[Unit]
+Description=Apply the look profile matching the current wallpaper
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/wallprofile
