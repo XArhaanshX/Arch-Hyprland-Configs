@@ -1,0 +1,13 @@
+[Unit]
+Description=Auto-login to VIT WiFi captive portal (event-driven)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/vit-wifi-login --daemon
+# Restart only if the watcher itself dies; it never exits on its own.
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

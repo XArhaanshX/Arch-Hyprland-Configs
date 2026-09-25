@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""
+Log in to VIT's Pronto Networks captive portal automatically.
+
+  vit-wifi-login            check once; log in if behind the portal
+  vit-wifi-login --status   show SSID, VIT match, and online/portal state
+  vit-wifi-login --daemon   watch NetworkManager and log in on every
+                            reconnect or portal session expiry (the systemd
+                            user service runs this)
+
+Event-driven, never a polling loop: the daemon sleeps until NetworkManager
+reports a change (a connection coming up, or its own connectivity check
+flipping to PORTAL -- which is also how an expired portal session shows up).
+Off-campus, a non-VIT SSID means nothing happens at all.
+
+Credentials live in ~/.config/vit-wifi/credentials (mode 0600):
+    VIT_USER=<register number>
+    VIT_PASS=<portal password>
+"""
+
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+PORTAL = "http://phc.prontonetworks.com/cgi-bin/authlogin"
+PROBE = "http://connectivitycheck.gstatic.com/generate_204"
+CREDS = os.path.expanduser("~/.config/vit-wifi/credentials")
+
+# T-VIT, R-VIT, S-VIT, VIT5, VIT-5G ... but not words that merely contain
+# "vit" (e.g. "DAVIT", "VITAL"): VIT must not touch another letter.
+VIT_SSID = re.compile(r"(?<![A-Za-z])VIT(?![A-Za-z])", re.IGNORECASE)
+
+MAX_TRIES = 3            # per trigger; the portal is sometimes slow to accept
+RETRY_GAP = 4            # seconds between tries
+DEBOUNCE = 3             # NM fires several signals per reconnect; coalesce them
+
+
+def log(msg):
+    print(f"[vit-wifi] {msg}", flush=True)
+
+
+def notify(title, body, urgency="normal"):
+    try:
+        subprocess.run(["notify-send", "-a", "VIT WiFi", "-u", urgency,
+                        title, body], timeout=5,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def load_creds():
+    creds = {}
+    try:
+        with open(CREDS) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    creds[k.strip()] = v.strip()
+    except FileNotFoundError:
+        return None
+    if not creds.get("VIT_USER") or not creds.get("VIT_PASS"):
+        return None
+    return creds
+
+
+def current_ssid():
+    try:
+        out = subprocess.run(["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        if line.startswith("yes:"):
+            return line[4:].replace("\\:", ":")
+    return None
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **kw):
+        return None
+
+
+def net_state():
+    """'online', 'portal' or 'offline'.
+
+    A 204 from the probe means real internet. Anything else -- a redirect,
+    or a 200 with Pronto's page instead of an empty body -- means the portal
+    intercepted it.
+    """
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        r = opener.open(PROBE, timeout=6)
+        return "online" if r.status == 204 else "portal"
+    except urllib.error.HTTPError as e:
+        # 3xx lands here because redirects are disabled
+        return "portal" if 300 <= e.code < 400 else "offline"
+    except (urllib.error.URLError, OSError):
+        return "offline"
+
+
+def post_login(creds):
+    """Returns 'ok', 'bad_creds' or 'error'."""
+    data = urllib.parse.urlencode({
+        "userId": creds["VIT_USER"],
+        "password": creds["VIT_PASS"],
+        "serviceName": "ProntoAuthentication",
+        "Submit22": "Login",
+    }).encode()
+    try:
+        with urllib.request.urlopen(PORTAL, data=data, timeout=10) as r:
+            body = r.read().decode(errors="replace").lower()
+    except (urllib.error.URLError, OSError) as e:
+        log(f"portal unreachable: {e}")
+        return "error"
+    if re.search(r"successful|congratulations|already logged in", body):
+        return "ok"
+    if re.search(r"sorry|check your (user|password)|invalid|incorrect", body):
+        return "bad_creds"
+    # Unrecognised page: trust the network over the HTML.
+    return "ok" if net_state() == "online" else "error"
+
+
+_bad_creds_for = None      # (ssid, creds-file mtime) that last failed auth
+
+
+def attempt(verbose=True):
+    global _bad_creds_for
+    ssid = current_ssid()
+    if not ssid or not VIT_SSID.search(ssid):
+        if verbose:
+            log(f"not on VIT wifi ({ssid or 'no wifi'}) -- nothing to do")
+        return
+
+    state = net_state()
+    if state == "online":
+        if verbose:
+            log(f"{ssid}: already online")
+        return
+    if state == "offline":
+        log(f"{ssid}: no route yet -- waiting for the next network event")
+        return
+
+    creds = load_creds()
+    if not creds:
+        log(f"no credentials in {CREDS}")
+        notify("VIT WiFi", f"Portal detected but no credentials in {CREDS}", "critical")
+        return
+
+    # A rejected password will not start working by itself; do not hammer the
+    # portal with it on every reconnect. Editing the credentials file resets
+    # this (its mtime changes).
+    key = (ssid, os.path.getmtime(CREDS))
+    if _bad_creds_for == key:
+        log("skipping: these credentials were rejected; fix the file to retry")
+        return
+
+    for i in range(1, MAX_TRIES + 1):
+        log(f"{ssid}: behind portal, logging in (try {i}/{MAX_TRIES})")
+        result = post_login(creds)
+        if result == "bad_creds":
+            _bad_creds_for = key
+            log("portal rejected the username/password")
+            notify("VIT WiFi login failed",
+                   "Username or password rejected. Edit " + CREDS, "critical")
+            return
+        if result == "ok" and net_state() == "online":
+            log(f"{ssid}: logged in")
+            notify("VIT WiFi", f"Logged in to {ssid}")
+            return
+        time.sleep(RETRY_GAP)
+    log(f"{ssid}: gave up after {MAX_TRIES} tries; next network event retries")
+
+
+def daemon():
+    import gi
+    gi.require_version("GLib", "2.0")
+    from gi.repository import Gio, GLib
+
+    bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+    pending = {"id": None}
+
+    def fire():
+        pending["id"] = None
+        try:
+            attempt(verbose=False)
+        except Exception as e:               # never let one bad event kill the watcher
+            log(f"error: {e}")
+        return False
+
+    def schedule(*_):
+        if pending["id"] is not None:
+            GLib.source_remove(pending["id"])
+        pending["id"] = GLib.timeout_add_seconds(DEBOUNCE, fire)
+
+    def on_props(*args):
+        iface, changed, _ = args[5]
+        if iface == "org.freedesktop.NetworkManager" and (
+                "Connectivity" in changed or "State" in changed
+                or "PrimaryConnection" in changed):
+            schedule()
+
+    bus.signal_subscribe("org.freedesktop.NetworkManager",
+                         "org.freedesktop.DBus.Properties", "PropertiesChanged",
+                         "/org/freedesktop/NetworkManager", None,
+                         Gio.DBusSignalFlags.NONE, on_props, None)
+    log("watching NetworkManager")
+    schedule()                                # handle the state we booted into
+    try:
+        GLib.MainLoop().run()
+    except KeyboardInterrupt:
+        pass
+
+
+def status():
+    ssid = current_ssid()
+    creds = load_creds()
+    print(f"ssid        : {ssid or '-'}")
+    print(f"VIT network : {'yes' if ssid and VIT_SSID.search(ssid) else 'no'}")
+    print(f"network     : {net_state()}")
+    print(f"credentials : {'present' if creds else 'MISSING (' + CREDS + ')'}"
+          + (f" (user {creds['VIT_USER']})" if creds else ""))
+
+
+if __name__ == "__main__":
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    if arg == "--daemon":
+        daemon()
+    elif arg == "--status":
+        status()
+    elif arg in ("", "--once"):
+        attempt()
+    else:
+        print(__doc__)
+        sys.exit(1)

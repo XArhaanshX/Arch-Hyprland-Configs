@@ -64,6 +64,7 @@ FILES=(
   ".config/systemd/user/easyeffects.service"
   ".config/systemd/user/wallprofile.path"
   ".config/systemd/user/wallprofile.service"
+  ".config/systemd/user/vit-wifi.service"
 
   # --- scripts ---
   ".local/bin/donut"
@@ -72,6 +73,7 @@ FILES=(
   ".local/bin/bt-autoconnect"
   ".local/bin/theatre"
   ".local/bin/wallprofile"
+  ".local/bin/vit-wifi-login"
   ".local/bin/dotsync"
 
   # --- shell (quickshell) user settings ---
