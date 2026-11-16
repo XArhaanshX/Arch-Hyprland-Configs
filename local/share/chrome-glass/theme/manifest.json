@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Glass key (for Hyprland chroma key)",
+  "description": "Paints Chrome's tab strip, toolbar and new-tab page one exact colour (#0A141A) so the compositor can turn that colour see-through.",
+  "version": "1.0",
+  "theme": {
+    "colors": {
+      "frame": [10, 20, 26],
+      "frame_inactive": [10, 20, 26],
+      "frame_incognito": [10, 20, 26],
+      "frame_incognito_inactive": [10, 20, 26],
+      "background_tab": [10, 20, 26],
+      "background_tab_inactive": [10, 20, 26],
+      "background_tab_incognito": [10, 20, 26],
+      "background_tab_incognito_inactive": [10, 20, 26],
+      "toolbar": [10, 20, 26],
+      "omnibox_background": [10, 20, 26],
+      "ntp_background": [10, 20, 26],
+      "tab_text": [236, 238, 242],
+      "tab_background_text": [196, 200, 208],
+      "tab_background_text_inactive": [170, 174, 182],
+      "bookmark_text": [220, 224, 230],
+      "toolbar_text": [236, 238, 242],
+      "toolbar_button_icon": [220, 224, 230],
+      "omnibox_text": [236, 238, 242],
+      "ntp_text": [236, 238, 242],
+      "ntp_link": [255, 120, 120]
+    }
+  }
+}
