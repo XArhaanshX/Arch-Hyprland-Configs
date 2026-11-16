@@ -77,6 +77,7 @@ FILES=(
   ".local/bin/vit-wifi-login"
   ".local/bin/safe-update"
   ".local/bin/nosleep"
+  ".local/bin/nothing-liquid-rollback"
   ".local/bin/dotsync"
 
   # --- shell (quickshell) user settings ---

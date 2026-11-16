@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Roll back Nothing Liquid (installed 15 Nov 2026 from ~/.local/share/nothing-liquid/repo).
+#
+#   nothing-liquid-rollback              full undo: the theme's own uninstall.sh puts back
+#                                        every file it replaced, as it was before the install
+#   nothing-liquid-rollback plugin-off   keep the new shell, turn off only the compositor glass
+#                                        plugin (use this from a TTY if Hyprland crashes at login)
+#   nothing-liquid-rollback plugin-on    turn the plugin back on
+#   nothing-liquid-rollback tarball      last resort: restore the full snapshot of ~/.config/hypr,
+#                                        quickshell, illogical-impulse, kitty, foot, darklyrc and
+#                                        ~/.local/state/quickshell taken just before the install
+#                                        (what's there now is moved aside, not deleted)
+#
+# Works from a TTY too (Ctrl+Alt+F3, log in, run it, then log back in to Hyprland).
+set -euo pipefail
+
+REPO="$HOME/.local/share/nothing-liquid/repo"
+SO="$HOME/.local/lib/nothing-liquid/hyprglass.so"
+RB="$HOME/.local/share/nothing-liquid-rollback"
+in_hypr() { [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; }
+say() { printf '\033[1m·\033[0m %s\n' "$*"; }
+
+restart_shell() {
+  in_hypr || { say "not inside Hyprland: changes apply at the next Hyprland login"; return 0; }
+  hyprctl reload >/dev/null 2>&1 || true
+  qs -c ii kill >/dev/null 2>&1 || true
+  setsid -f qs -c ii >/dev/null 2>&1 || true
+  pkill -USR1 -x kitty 2>/dev/null || true
+}
+
+case "${1:-full}" in
+  plugin-off)
+    in_hypr && hyprctl plugin unload "$SO" >/dev/null 2>&1 || true
+    [[ -f "$SO" ]] && mv -f "$SO" "$SO.off"
+    in_hypr && hyprctl reload >/dev/null 2>&1 || true
+    say "glass plugin off (file kept as $SO.off). Undo: nothing-liquid-rollback plugin-on"
+    ;;
+  plugin-on)
+    [[ -f "$SO.off" ]] && mv -f "$SO.off" "$SO"
+    in_hypr && { hyprctl reload >/dev/null 2>&1 || true; sleep 1
+                 hyprctl plugin list 2>/dev/null | grep -q '^Plugin hyprglass' || hyprctl plugin load "$SO" >/dev/null 2>&1 || true; }
+    say "glass plugin on"
+    ;;
+  full)
+    [[ -f "$SO.off" ]] && rm -f "$SO.off"
+    "$REPO/uninstall.sh"
+    say "Nothing Liquid removed; your previous files are back."
+    say "If anything still looks wrong: nothing-liquid-rollback tarball"
+    ;;
+  tarball)
+    tgz="$(ls -1t "$RB"/pre-nothing-liquid-*.tar.gz | head -1)"
+    paths_file="${tgz%.tar.gz}.paths"
+    aside="$RB/aside-$(date +%Y%m%d-%H%M%S)"
+    say "restoring $tgz"
+    mkdir -p "$aside"
+    while IFS= read -r p; do
+      [[ -n "$p" && -e "$HOME/$p" ]] || continue
+      mkdir -p "$aside/$(dirname "$p")"
+      mv "$HOME/$p" "$aside/$p"
+    done < "$paths_file"
+    tar -xzf "$tgz" -C "$HOME"
+    in_hypr && hyprctl plugin unload "$SO" >/dev/null 2>&1 || true
+    rm -f "$SO" "$SO.off"
+    rm -f "$HOME/.local/share/kxmlgui5/konsole/sessionui.rc"   # the one file the theme adds outside those folders
+    [[ -d "$HOME/.local/share/nothing-liquid/original" ]] && \
+      mv "$HOME/.local/share/nothing-liquid/original" "$HOME/.local/share/nothing-liquid/uninstalled-$(date +%Y%m%d-%H%M%S)"
+    restart_shell
+    say "restored. What was there before the restore is in $aside"
+    ;;
+  *) sed -n '2,15p' "$0"; exit 2 ;;
+esac
