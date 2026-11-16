@@ -342,6 +342,12 @@ started at login. Two instances then fight over the notification server and the
 polkit agent (and pop the conflict dialog twice). `qs list --all` shows them;
 kill the old PID and start the shell once more.
 
+**Rebuild after updates.** Hyprland plugins are tied to the exact Hyprland
+build: after a Hyprland update rebuild both (`chrome-glass rebuild`, and the
+glass plugin with Nothing Liquid's `install.sh`). The same goes for the
+`illogical-impulse-quickshell-git` package after a Qt update; Quickshell warns
+"built against Qt X but the system has updated to Qt Y" in its log.
+
 ---
 
 ## Notes if reusing this
