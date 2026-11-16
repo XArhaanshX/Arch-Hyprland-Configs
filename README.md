@@ -387,6 +387,12 @@ So when the ii shell restarts, its wallpaper lands on top. The mist watches for
 the `openlayer` event of `quickshell:background` and unmaps and maps itself
 again, which puts it back on top.
 
+**An animated desktop costs more than its shader.** With liquid glass, every
+frame of anything under the windows makes Hyprland re-render the glass of every
+window over it. Measured with one window open: GPU busy 13% idle, 25% at 8 fps,
+42% at 24 fps, and making the mist shader 4-5x cheaper barely changed it. Hold
+animations still while windows cover them.
+
 ---
 
 ## Notes if reusing this
