@@ -52,7 +52,7 @@
     },
     "transparency": {
       "automatic": false,
-      "backgroundTransparency": 0.45,
+      "backgroundTransparency": 0.35,
       "contentTransparency": 0.9,
       "enable": true
     },
