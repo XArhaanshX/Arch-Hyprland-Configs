@@ -6,8 +6,8 @@ Personal configuration for a CachyOS / Hyprland desktop, built on top of
 Everything here is **hand-written config**. Files that matugen generates are
 deliberately not tracked — see [Tracked vs generated](#tracked-vs-generated).
 
-**Machine:** CachyOS · Hyprland 0.56 (Wayland) · Quickshell (`ii`) · kitty ·
-fish · PipeWire · Intel Arc 130T/140T
+**Machine:** CachyOS · Hyprland 0.57 (Wayland, Lua config) · Quickshell (`ii`) with
+[Nothing Liquid](#nothing-liquid-liquid-glass) · kitty · fish · PipeWire · Intel Arc 130T/140T
 
 ---
 
