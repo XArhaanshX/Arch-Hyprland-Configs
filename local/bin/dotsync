@@ -101,6 +101,7 @@ FILES=(
   ".config/quickshell/mist/shaders/mist.frag"
   ".config/quickshell/mist/shaders/mist.frag.qsb"
   ".config/quickshell/mist/MistEffect.qml"
+  ".config/quickshell/mist/shell.qml"
 )
 
 # Upstream illogical-impulse files we patched. Stored as diffs rather than
