@@ -126,6 +126,21 @@ btpair WH-1000 120
 **event-driven, not polling** — it costs nothing idle and never wakes the
 radio on its own.
 
+### `safe-update` — guarded system update
+
+```fish
+safe-update            # pre-flight checks, repo + AUR upgrade, then "safe to reboot?" checks
+safe-update --check    # only the boot checks, no updating
+safe-update --no-aur
+```
+
+Pre-flight: pacman lock, charger or battery level, disk and ESP space, internet,
+the last three weeks of Arch news. After the upgrade it checks every kernel
+really reached the ESP (`vmlinuz` byte-identical to the module tree's,
+initramfs newer than the kernel, a Limine entry) and ends with **SAFE** or
+**DO NOT REBOOT**. Written after an update where pacman reported success, the
+mkinitcpio hook never copied the new kernels, and neither kernel booted.
+
 ### `dotsync` — push configs to this repo
 
 ```fish
