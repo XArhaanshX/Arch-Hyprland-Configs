@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# chrome-glass: see-through Chrome through Hypr-DarkWindow's chromakey shader.
+#
+#   chrome-glass on        build the plugin if it isn't there yet (the version pinned for
+#                          your Hyprland), then load it
+#   chrome-glass off       turn it off (the plugin file is kept as .off)
+#   chrome-glass rebuild   rebuild after a Hyprland update, then load it
+#   chrome-glass status
+#
+# Config: ~/.config/hypr/custom/chrome_glass.lua. Source: ~/.local/share/chrome-glass/darkwindow.
+# Chrome side: the "Glass key" theme (~/.local/share/chrome-glass/theme, loaded unpacked).
+set -euo pipefail
+
+SRC="$HOME/.local/share/chrome-glass/darkwindow"
+SO="$HOME/.local/lib/chrome-glass/hypr-darkwindow.so"
+say() { printf '\033[1m·\033[0m %s\n' "$*"; }
+in_hypr() { [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; }
+loaded() { hyprctl plugin list 2>/dev/null | grep -qi 'darkwindow'; }
+
+build() {
+  local hv pin
+  hv="$(Hyprland --version | sed -n 's/.* at commit \([0-9a-f]\{40\}\).*/\1/p' | head -1)"
+  # the newest pin list (origin/HEAD), not the checked-out commit's older copy
+  git -C "$SRC" fetch -q origin 2>/dev/null || say "offline: using the pins already downloaded"
+  pin="$(git -C "$SRC" show origin/HEAD:hyprpm.toml | grep -F "\"$hv\"" | grep -oE '[0-9a-f]{40}' | sed -n 2p || true)"
+  [[ -n "$pin" ]] || { say "Hypr-DarkWindow has no version for this Hyprland yet: staying off"; exit 1; }
+  say "building Hypr-DarkWindow ${pin:0:7} for Hyprland ${hv:0:7}"
+  git -C "$SRC" checkout -q "$pin"
+  command make -C "$SRC" clean >/dev/null 2>&1 || true
+  command make -C "$SRC" -j"$(nproc)" >/tmp/chrome-glass-build.log 2>&1 \
+    || { say "build failed, see /tmp/chrome-glass-build.log"; exit 1; }
+  mkdir -p "$(dirname "$SO")"
+  cp "$SRC/out/hypr-darkwindow.so" "$SO.new"
+  mv -f "$SO.new" "$SO"   # a rename: a running Hyprland keeps the old file mapped
+  rm -f "$SO.off"
+}
+
+apply() {
+  in_hypr || { say "not inside Hyprland: applies at the next login"; return 0; }
+  hyprctl reload >/dev/null
+  for _ in 1 2 3 4 5 6; do loaded && break; sleep 0.5; done
+  hyprctl reload >/dev/null   # second pass: the window rule needs the plugin's Lua functions
+}
+
+case "${1:-status}" in
+  on)
+    [[ -f "$SO" ]] || { [[ -f "$SO.off" ]] && mv -f "$SO.off" "$SO"; } || true
+    [[ -f "$SO" ]] || build
+    apply
+    loaded && say "on: Chrome's theme colour is now see-through" || say "the plugin did not load: hyprctl configerrors"
+    ;;
+  rebuild)
+    build; apply
+    loaded && say "rebuilt and on" || say "the plugin did not load: hyprctl configerrors"
+    ;;
+  off)
+    [[ -f "$SO" ]] && mv -f "$SO" "$SO.off"
+    in_hypr && { hyprctl reload >/dev/null; hyprctl plugin unload "$SO" >/dev/null 2>&1 || true; }
+    say "off (Chrome stays the theme's solid dark colour; switch Chrome's theme back to drop that too)"
+    ;;
+  status)
+    if loaded; then say "on"; elif [[ -f "$SO.off" ]]; then say "off"; elif [[ -f "$SO" ]]; then say "installed, not loaded"; else say "not built yet: chrome-glass on"; fi
+    ;;
+  *) sed -n '2,11p' "$0"; exit 2 ;;
+esac
