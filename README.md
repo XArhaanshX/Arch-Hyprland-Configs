@@ -380,6 +380,13 @@ glass plugin with Nothing Liquid's `install.sh`). The same goes for the
 `illogical-impulse-quickshell-git` package after a Qt update; Quickshell warns
 "built against Qt X but the system has updated to Qt Y" in its log.
 
+**ii's wallpaper is on the `bottom` layer, not `background`.** Anything meant
+to sit on the wallpaper but under windows has to share that layer, and inside a
+layer Hyprland stacks surfaces by map order (0.57 has no layer rule for order).
+So when the ii shell restarts, its wallpaper lands on top. The mist watches for
+the `openlayer` event of `quickshell:background` and unmaps and maps itself
+again, which puts it back on top.
+
 ---
 
 ## Notes if reusing this
