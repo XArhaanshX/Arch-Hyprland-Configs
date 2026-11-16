@@ -9,3 +9,10 @@ end
 if is_file_exists(HOME .. "/.config/hypr/custom/chrome_glass.lua") then
     require("custom.chrome_glass")
 end
+
+-- Workspace slide: a real spring, so it wobbles both ways like jelly glass: ~12% past the
+-- target, ~1.5% back, a last tiny ripple, settled in ~0.56 s (damping ratio 0.55).
+-- Less wobble: raise damping (19.8 = ~9% then ~1%); more: lower it (16.5 = ~15% then ~2.3%).
+-- Loaded after the theme's liquidglass.lua, so it wins; delete this block to go back.
+hl.curve("liquidWobble", { type = "spring", mass = 1, stiffness = 273, damping = 18 })
+hl.animation({ leaf = "workspaces", enabled = true, speed = 5.0, spring = "liquidWobble", style = "slide" })
