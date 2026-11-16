@@ -208,16 +208,21 @@ nothing-liquid-rollback tarball      # last resort: restore the snapshot taken b
 
 ## Patches (`patches/`)
 
-Upstream illogical-impulse files that are modified. Kept as diffs rather than
-whole files, so dots updates don't get clobbered.
+Upstream files that are modified. Kept as diffs rather than whole files, so
+dots updates don't get clobbered. With Nothing Liquid installed, `dotsync`
+diffs against the fork's version of each file (the theme replaces them);
+otherwise against the `.bak-preclaude` copy of end-4's original.
 
 | patch | what it does |
 |---|---|
 | `BluetoothStatus.qml.patch` | hides unpaired devices with no name — nearby phones broadcast BLE with rotating random addresses, burying anything pairable |
 | `Notifications.qml.patch` | adds an IPC handler for do-not-disturb, so scripts can reach it (`theatre` depends on this) |
+| `general.lua.patch` | `hypr/hyprland/general.lua`: a 3-finger horizontal swipe switches workspaces instead of dragging the window. Gestures are additive, so this can't be done from `custom/` |
+
+Paths inside the patches are relative to the home folder:
 
 ```fish
-cd ~/.config/quickshell/ii
+cd ~
 patch -p0 < ~/Projects/Arch-Hyprland-Configs/patches/Notifications.qml.patch
 ```
 
