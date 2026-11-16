@@ -100,6 +100,7 @@ FILES=(
   # --- drifting mist over the wallpaper (a separate Quickshell config) ---
   ".config/quickshell/mist/shaders/mist.frag"
   ".config/quickshell/mist/shaders/mist.frag.qsb"
+  ".config/quickshell/mist/MistEffect.qml"
 )
 
 # Upstream illogical-impulse files we patched. Stored as diffs rather than
