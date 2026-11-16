@@ -141,6 +141,18 @@ initramfs newer than the kernel, a Limine entry) and ends with **SAFE** or
 **DO NOT REBOOT**. Written after an update where pacman reported success, the
 mkinitcpio hook never copied the new kernels, and neither kernel booted.
 
+### `nosleep` — keep the laptop awake
+
+```fish
+nosleep               # toggle
+nosleep on / off      # explicit
+nosleep status
+```
+
+Holds a `systemd-inhibit` lock (idle, sleep, lid switch, sleep key) inside a
+transient user unit, so nothing in the config changes and logging out or
+rebooting turns it off. It cannot stop the critical-battery suspend.
+
 ### `dotsync` — push configs to this repo
 
 ```fish
