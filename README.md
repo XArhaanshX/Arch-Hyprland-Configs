@@ -359,3 +359,5 @@ glass plugin with Nothing Liquid's `install.sh`). The same goes for the
 - `config/matugen/config.toml` is shipped by illogical-impulse, so a dots
   update can drop the added template entries. Re-append the block under
   `# Terminal-side apps (added)`.
+- `wispd.service` points at a virtualenv inside `~/Projects/better-cluely`.
+  Adjust `ExecStart` if wisp lives elsewhere.
