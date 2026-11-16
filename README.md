@@ -206,6 +206,34 @@ nothing-liquid-rollback tarball      # last resort: restore the snapshot taken b
 
 ---
 
+## See-through Chrome (`chrome-glass`)
+
+Chrome paints every pixel opaque, so the liquid glass never shows through it,
+and a window opacity rule would fade videos too. A chroma key does it instead:
+
+1. The **Glass key** theme (`local/share/chrome-glass/theme/`, loaded unpacked
+   from `chrome://extensions` in Developer mode) paints the tab strip, toolbar
+   and new-tab page exactly `#0A141A`.
+2. [Hypr-DarkWindow](https://github.com/micha4w/Hypr-DarkWindow)'s `chromakey`
+   shader (`config/hypr/custom/chrome_glass.lua`) makes only pixels of that
+   colour see-through. Text, images and video keep their own colours and stay
+   solid, and fullscreen Chrome is left alone.
+3. Chrome is tagged `hyprglass_preset_tahoe`: the frosted glass of the launcher
+   and sidebars, not the clear lens windows get by default.
+
+```fish
+chrome-glass on        # build the plugin commit pinned for this Hyprland, then load it
+chrome-glass off
+chrome-glass rebuild   # after a Hyprland update
+chrome-glass status
+```
+
+For see-through web pages too, set Dark Reader's background colour to
+`#0A141A`. If the key colour ever changes, change it in the theme and in the
+shader's `bkg` together.
+
+---
+
 ## Patches (`patches/`)
 
 Upstream files that are modified. Kept as diffs rather than whole files, so
