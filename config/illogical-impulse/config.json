@@ -29,6 +29,23 @@
       "reading": "Readex Pro",
       "title": "JetBrains Mono NF"
     },
+    "liquidGlass": {
+      "accentColor": "#D71921",
+      "capsuleBar": false,
+      "contentTransparency": 0.78,
+      "darkEdge": true,
+      "edgeHighlight": 1.7481385379061372,
+      "enable": true,
+      "glowSpread": true,
+      "highlights": "top",
+      "mode": "clear",
+      "modularSidebar": true,
+      "nearReflection": true,
+      "pressGlow": "subtle",
+      "refraction": 1.0591719314079422,
+      "tint": 0.1,
+      "tintAmount": 0.6
+    },
     "palette": {
       "accentColor": "",
       "type": "scheme-content"
