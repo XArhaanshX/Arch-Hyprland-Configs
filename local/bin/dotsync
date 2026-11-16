@@ -74,6 +74,7 @@ FILES=(
   ".local/bin/theatre"
   ".local/bin/wallprofile"
   ".local/bin/vit-wifi-login"
+  ".local/bin/safe-update"
   ".local/bin/dotsync"
 
   # --- shell (quickshell) user settings ---

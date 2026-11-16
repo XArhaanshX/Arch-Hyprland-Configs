@@ -1,0 +1,294 @@
+#!/usr/bin/env bash
+# safe-update: full system update with pre-flight checks and a post-update
+# "is it safe to reboot?" verdict. Built for CachyOS + Limine + snapper.
+#
+#   safe-update            pre-flight checks, full repo upgrade, AUR upgrade, then boot checks
+#   safe-update --check    only run the "safe to reboot?" checks (no updating)
+#   safe-update --no-aur   skip AUR packages
+#   safe-update --help
+#
+# It never runs a partial upgrade (`pacman -S pkg` without -u), never removes
+# anything, and never reboots for you.
+
+set -uo pipefail
+
+ESP="/boot"
+LOGDIR="$HOME/.local/state/safe-update"
+LOG="$LOGDIR/$(date +%Y%m%d-%H%M%S).log"
+MIN_ROOT_FREE_GB=5
+MIN_ESP_FREE_MB=300
+MIN_BATTERY=40
+
+DO_UPDATE=1
+DO_AUR=1
+for a in "$@"; do
+    case "$a" in
+        --check) DO_UPDATE=0 ;;
+        --no-aur) DO_AUR=0 ;;
+        -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "unknown option: $a (try --help)"; exit 2 ;;
+    esac
+done
+
+mkdir -p "$LOGDIR"
+
+B=$'\e[1m'; R=$'\e[31m'; G=$'\e[32m'; Y=$'\e[33m'; C=$'\e[36m'; N=$'\e[0m'
+FAILS=(); WARNS=(); NOTES=()
+lg()   { echo "$*" >> "$LOG"; }
+ok()   { echo "  ${G}✔${N} $*"; lg "OK    $*"; }
+warn() { echo "  ${Y}!${N} $*"; lg "WARN  $*"; WARNS+=("$*"); }
+fail() { echo "  ${R}✘${N} $*"; lg "FAIL  $*"; FAILS+=("$*"); }
+info() { echo "  ${C}·${N} $*"; lg "      $*"; }
+step() { echo; echo "${B}${C}==>${N}${B} $*${N}"; lg "== $*"; }
+ask()  { local r; read -r -p "  $* [y/N] " r; [[ "$r" =~ ^[Yy] ]]; }
+
+UPDATING=0
+on_interrupt() {
+    echo
+    if (( UPDATING )); then
+        echo "${R}${B}Interrupted in the middle of an update. DO NOT REBOOT.${N}"
+        echo "Run ${B}safe-update${N} again to finish it, then follow its verdict."
+        notify-send -u critical -a safe-update "Update interrupted" "Do not reboot. Run safe-update again." 2>/dev/null
+    fi
+    exit 130
+}
+trap on_interrupt INT TERM
+
+kernel_pkgs() {   # installed packages that ship a kernel image
+    pacman -Qqo /usr/lib/modules/*/vmlinuz 2>/dev/null | sort -u
+}
+kernel_ver_of() { # kernel release dir for a kernel package
+    pacman -Ql "$1" | awk '$2 ~ /\/usr\/lib\/modules\/[^/]+\/vmlinuz$/ {split($2,p,"/"); print p[5]}' | head -1
+}
+
+# ───────────────────────────── pre-flight ─────────────────────────────
+preflight() {
+    step "Pre-flight checks"
+
+    if [[ -e /var/lib/pacman/db.lck ]]; then
+        if pgrep -x 'pacman|yay|paru|pamac|makepkg' >/dev/null; then
+            fail "Another package manager is running. Wait for it to finish."
+        else
+            warn "Stale pacman lock found (no package manager running)."
+            if ask "Remove the stale lock?"; then
+                sudo rm -f /var/lib/pacman/db.lck && ok "Stale lock removed"
+            else
+                fail "Pacman is locked."
+            fi
+        fi
+    else
+        ok "No other update is running"
+    fi
+
+    # Power: a kernel install cut off by a dead battery is a classic way to lose boot.
+    local ac=1 bat=""
+    for s in /sys/class/power_supply/*; do
+        [[ -r "$s/type" ]] || continue
+        case "$(cat "$s/type")" in
+            Mains) ac=$(cat "$s/online" 2>/dev/null || echo 1) ;;
+            Battery) bat=$(cat "$s/capacity" 2>/dev/null) ;;
+        esac
+    done
+    if [[ -n "$bat" && "$ac" == 0 ]]; then
+        if (( bat < MIN_BATTERY )); then
+            fail "On battery at ${bat}%. Plug in the charger first (needs ${MIN_BATTERY}%+ or AC)."
+        else
+            warn "On battery at ${bat}%. Plugging in is safer."
+        fi
+    else
+        ok "Power: charger connected${bat:+ (battery ${bat}%)}"
+    fi
+
+    local root_free esp_free
+    root_free=$(df -BG --output=avail / | tail -1 | tr -dc 0-9)
+    (( root_free >= MIN_ROOT_FREE_GB )) && ok "Root disk: ${root_free}G free" \
+        || fail "Root disk has only ${root_free}G free (need ${MIN_ROOT_FREE_GB}G). Try: sudo paccache -rk1"
+    esp_free=$(df -BM --output=avail "$ESP" | tail -1 | tr -dc 0-9)
+    (( esp_free >= MIN_ESP_FREE_MB )) && ok "Boot partition: ${esp_free}M free" \
+        || fail "Boot partition has only ${esp_free}M free (need ${MIN_ESP_FREE_MB}M for new kernels)."
+
+    if curl -fsS --max-time 8 -o /dev/null https://archlinux.org 2>/dev/null; then
+        ok "Internet reachable"
+    else
+        fail "No internet connection (couldn't reach archlinux.org)."
+    fi
+
+    if pacman -Qq snap-pac >/dev/null 2>&1; then
+        ok "A system snapshot will be taken automatically before packages change"
+    else
+        warn "snap-pac not installed: no automatic pre-update snapshot."
+    fi
+
+    # Recent Arch news: manual-intervention notices are what usually bite.
+    local news
+    news=$(curl -fsS --max-time 8 https://archlinux.org/feeds/news/ 2>/dev/null | python3 -c '
+import sys, email.utils, datetime, xml.etree.ElementTree as ET
+try:
+    root = ET.fromstring(sys.stdin.read())
+except Exception:
+    sys.exit()
+now = datetime.datetime.now(datetime.timezone.utc)
+for it in root.iter("item"):
+    d = email.utils.parsedate_to_datetime(it.findtext("pubDate"))
+    if (now - d).days <= 21:
+        t = it.findtext("title")
+        print(f"{d:%d %b}: {t}")
+' 2>/dev/null)
+    if [[ -n "$news" ]]; then
+        warn "Arch news from the last 3 weeks. Read before updating: https://archlinux.org/news/"
+        while IFS= read -r l; do info "$l"; done <<< "$news"
+    else
+        ok "No Arch news in the last 3 weeks"
+    fi
+}
+
+# ─────────────────────────── boot health checks ───────────────────────────
+boot_checks() {
+    step "Checking the system is safe to reboot"
+    sudo -v || { fail "Need sudo to inspect the boot partition."; return; }
+
+    # 1. Partial-upgrade state: package lists newer than installed packages.
+    local pending
+    pending=$(pacman -Qu 2>/dev/null | grep -v '\[ignored\]')
+    if [[ -n "$pending" ]]; then
+        fail "$(wc -l <<< "$pending") repo packages are downloaded-lists-newer than installed (partial upgrade state). Finish with: safe-update"
+        head -5 <<< "$pending" | while IFS= read -r l; do info "$l"; done
+    else
+        ok "No half-finished upgrade: every repo package is up to date"
+    fi
+
+    # 2. Package database consistency.
+    if pacman -Dkq >/dev/null 2>&1; then
+        ok "Package dependencies are consistent"
+    else
+        warn "Package database reports dependency problems (run: pacman -Dk)"
+    fi
+
+    # 3. Every kernel: installed files, modules, boot-partition copy, initramfs, menu entry.
+    local mid good_kernels=0 total_kernels=0
+    mid=$(cat /etc/machine-id)
+    local conf="$ESP/limine.conf"
+    sudo test -f "$conf" || fail "Boot menu file $conf is missing!"
+
+    for pkg in $(kernel_pkgs); do
+        total_kernels=$((total_kernels + 1))
+        local ver kok=1
+        ver=$(kernel_ver_of "$pkg")
+        local mod="/usr/lib/modules/$ver" bootdir="$ESP/$mid/$pkg"
+        echo "  ${B}$pkg${N} ($ver)"
+
+        if ! pacman -Qkq "$pkg" >/dev/null 2>&1; then
+            fail "$pkg: some of its files are missing from disk (reinstall it)"; kok=0
+        fi
+        if [[ ! -s "$mod/modules.dep" || "$mod/modules.dep" -ot "$mod/vmlinuz" ]]; then
+            fail "$pkg: kernel modules index is missing or stale (depmod didn't run)"; kok=0
+        fi
+        if ! sudo test -s "$bootdir/vmlinuz"; then
+            fail "$pkg: kernel is not on the boot partition ($bootdir/vmlinuz)"; kok=0
+        elif ! sudo cmp -s "$bootdir/vmlinuz" "$mod/vmlinuz"; then
+            fail "$pkg: kernel on the boot partition doesn't match the installed one (copy failed or stale)"; kok=0
+        fi
+        local isz
+        isz=$(sudo stat -c %s "$bootdir/initramfs" 2>/dev/null || echo 0)
+        if (( isz < 5000000 )); then
+            fail "$pkg: initramfs is missing or too small (${isz} bytes)"; kok=0
+        elif [[ $(sudo stat -c %Y "$bootdir/initramfs") -lt $(stat -c %Y "$mod/vmlinuz") ]]; then
+            fail "$pkg: initramfs is older than the kernel (it wasn't rebuilt)"; kok=0
+        fi
+        if ! sudo grep -q "$mid/$pkg/vmlinuz" "$conf" 2>/dev/null; then
+            fail "$pkg: no entry for it in the boot menu"; kok=0
+        fi
+        if (( kok )); then ok "$pkg is installed, copied to the boot partition and in the boot menu"; good_kernels=$((good_kernels + 1)); fi
+    done
+    (( total_kernels == 0 )) && fail "No kernel package found at all!"
+    if (( good_kernels > 0 && good_kernels < total_kernels )); then
+        warn "At least one kernel is healthy: pick it from the boot menu if the default one fails."
+    fi
+
+    # 4. Snapshot rescue entries in the boot menu.
+    if sudo grep -qi "snapshots" "$conf" 2>/dev/null; then
+        ok "Boot menu has a Snapshots section (rescue option if an update breaks boot)"
+    else
+        warn "No Snapshots section in the boot menu yet."
+    fi
+
+    # 5. The running kernel's modules disappear after a kernel upgrade: reboot needed.
+    if [[ ! -d "/usr/lib/modules/$(uname -r)" ]]; then
+        NOTES+=("Kernel was updated: reboot to use it (USB devices and new drivers may misbehave until then).")
+    fi
+
+    # 6. New config files left for manual merging.
+    local pacnew
+    pacnew=$(find /etc -name '*.pacnew' -newermt '1 day ago' 2>/dev/null)
+    [[ -n "$pacnew" ]] && NOTES+=("New .pacnew config files to review: $(tr '\n' ' ' <<< "$pacnew")")
+}
+
+# ───────────────────────────── the update ─────────────────────────────
+run_update() {
+    local hypr_before log_start
+    hypr_before=$(pacman -Q hyprland 2>/dev/null)
+    log_start=$(wc -l < /var/log/pacman.log)
+
+    step "Updating official packages (full upgrade, never partial)"
+    UPDATING=1
+    sudo pacman -Syu
+    local rc=$?
+    UPDATING=0
+    if (( rc != 0 )); then
+        fail "pacman exited with code $rc (cancelled or failed)."
+    fi
+
+    # Hook / scriptlet errors in this run's part of the pacman log.
+    local errs
+    errs=$(tail -n +"$((log_start + 1))" /var/log/pacman.log | grep -E '\[ALPM(-SCRIPTLET)?\] (error|.*(failed|ERROR))' | grep -v 'directory permissions differ')
+    if [[ -n "$errs" ]]; then
+        fail "Errors during the update:"
+        while IFS= read -r l; do info "${l:0:180}"; done <<< "$errs"
+    fi
+
+    if (( DO_AUR && rc == 0 )) && command -v yay >/dev/null; then
+        step "Updating AUR packages"
+        UPDATING=1
+        yay -Sua || warn "Some AUR packages failed to update (system packages are fine)."
+        UPDATING=0
+    fi
+
+    [[ "$(pacman -Q hyprland 2>/dev/null)" != "$hypr_before" ]] && \
+        NOTES+=("Hyprland was updated: log out and back in soon (plugins and some features break until you do).")
+}
+
+# ─────────────────────────────── main ───────────────────────────────
+echo "${B}safe-update${N}  $(date '+%a %d %b %H:%M')   log: $LOG"
+
+if (( DO_UPDATE )); then
+    preflight
+    if (( ${#FAILS[@]} )); then
+        echo; echo "${R}${B}Not updating:${N} fix the problems above first. Nothing was changed."
+        exit 1
+    fi
+    if (( ${#WARNS[@]} )); then
+        echo; ask "There are warnings above. Continue with the update?" || { echo "Cancelled. Nothing was changed."; exit 1; }
+    fi
+    WARNS=()
+    run_update
+fi
+
+boot_checks
+
+step "Verdict"
+for n in "${NOTES[@]}"; do info "$n"; done
+if (( ${#FAILS[@]} )); then
+    echo
+    echo "  ${R}${B}✘ DO NOT REBOOT.${N} ${#FAILS[@]} problem(s):"
+    for f in "${FAILS[@]}"; do echo "    - $f"; done
+    echo "  Fix them, then run: safe-update --check"
+    echo "  If boot breaks anyway: pick a Snapshot or the LTS kernel from the boot menu."
+    notify-send -u critical -a safe-update "Do NOT reboot" "${#FAILS[@]} problem(s) found. See the terminal." 2>/dev/null
+    exit 1
+else
+    echo
+    echo "  ${G}${B}✔ SAFE TO REBOOT.${N} Kernels, boot files and boot menu all check out."
+    (( ${#WARNS[@]} )) && echo "  (${#WARNS[@]} minor warning(s) above, none affect booting.)"
+    notify-send -a safe-update "Safe to reboot" "Update finished and boot files check out." 2>/dev/null
+    exit 0
+fi
