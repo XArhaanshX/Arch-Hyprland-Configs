@@ -65,6 +65,7 @@ FILES=(
   ".config/systemd/user/wallprofile.path"
   ".config/systemd/user/wallprofile.service"
   ".config/systemd/user/vit-wifi.service"
+  ".config/systemd/user/wispd.service"
 
   # --- scripts ---
   ".local/bin/donut"
