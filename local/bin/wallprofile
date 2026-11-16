@@ -27,7 +27,8 @@ GLASS_CLASSES="org.kde.dolphin|Spotify"
 # at a time, and at the media-app value its body text starts fighting whatever
 # is behind it -- especially in the "default" profile, where blur is off and
 # the wallpaper shows through sharply rather than diffused.
-TEXT_GLASS_CLASSES="code"
+# VS Code 1.140+ names its window com.microsoft.VSCode; older builds used "code".
+TEXT_GLASS_CLASSES="code|com.microsoft.VSCode"
 
 STATE_WALL="$HOME/.local/state/quickshell/user/generated/wallpaper/path.txt"
 HYPR_PROFILE="$HOME/.config/hypr/custom/wallprofile.lua"
@@ -105,7 +106,7 @@ apply_hyprland() {
             # rules.lua blanket-disables blur on every window; re-enable it for
             # the apps where frosted glass actually reads well. Declared after
             # that rule, so this wins.
-            echo 'hl.window_rule({match = {class = "^(kitty|foot|Alacritty|org.kde.dolphin|Spotify|code|zen)$"}, no_blur = false})'
+            echo 'hl.window_rule({match = {class = "^(kitty|foot|Alacritty|org.kde.dolphin|Spotify|code|com.microsoft.VSCode|zen)$"}, no_blur = false})'
         fi
         # Opacity is what actually makes these windows glassy. Hyprland's blur
         # only renders behind translucent pixels, so without this the blur rule
