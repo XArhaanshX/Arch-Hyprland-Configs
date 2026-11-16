@@ -180,6 +180,32 @@ starts at login, the `wisp` command starts it when needed. Its keybinds are in
 
 ---
 
+## Nothing Liquid (liquid glass)
+
+Since November 2026 the desktop runs [Nothing Liquid](https://github.com/shlok-shinde/nothing-liquid)
+on top of illogical-impulse: a fork of end-4's dots plus a fork of the
+[hyprglass](https://github.com/hyprnux/hyprglass) plugin, which gives windows and
+shell panels macOS Tahoe-style liquid glass (refraction through a glass slab,
+not just blur).
+
+- Installed from `~/.local/share/nothing-liquid/repo` with its own `install.sh`,
+  which keeps every file it replaces in `~/.local/share/nothing-liquid/original`.
+- The plugin is `~/.local/lib/nothing-liquid/hyprglass.so`. The theme's
+  `hypr/hyprland/liquidglass.lua` loads it only if that file exists.
+  `hyprctl hyprglass status` is the health check.
+- Three of my own edits to upstream files survive on top of the fork, as
+  [patches](#patches-patches): the 3-finger workspace swipe, the unnamed
+  Bluetooth device filter and the do-not-disturb IPC.
+
+```fish
+nothing-liquid-rollback              # the theme's own uninstall: every replaced file back
+nothing-liquid-rollback plugin-off   # keep the shell, drop the compositor glass (works from a TTY)
+nothing-liquid-rollback plugin-on
+nothing-liquid-rollback tarball      # last resort: restore the snapshot taken before the install
+```
+
+---
+
 ## Patches (`patches/`)
 
 Upstream illogical-impulse files that are modified. Kept as diffs rather than
