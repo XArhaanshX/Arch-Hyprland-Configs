@@ -1,8 +1,8 @@
---- /home/arhaansh/.config/quickshell/ii/services/BluetoothStatus.qml.bak-preclaude	2026-09-18 03:58:01.950509091 +0530
-+++ /home/arhaansh/.config/quickshell/ii/services/BluetoothStatus.qml	2026-09-18 03:58:01.973911736 +0530
-@@ -15,20 +15,38 @@
-     readonly property int activeDeviceCount: Bluetooth.defaultAdapter?.devices.values.filter(device => device.connected).length ?? 0
-     readonly property bool connected: Bluetooth.devices.values.some(d => d.connected)
+--- .config/quickshell/ii/services/BluetoothStatus.qml
++++ .config/quickshell/ii/services/BluetoothStatus.qml
+@@ -80,20 +80,38 @@
+         }
+     }
  
 +    // A device whose "name" is just its own address has no real name to show.
 +    // BlueZ renders these with dashes (5A-71-2B-...), but accept colons too.
