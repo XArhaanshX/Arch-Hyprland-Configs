@@ -94,10 +94,13 @@ FILES=(
 
 # Upstream illogical-impulse files we patched. Stored as diffs rather than
 # whole files, because copying them wholesale would fight dots updates.
+# The base is the Nothing Liquid fork's version of the file when that theme is
+# installed (it replaces these files), else end-4's original (.bak-preclaude).
 PATCHED=(
   ".config/quickshell/ii/services/BluetoothStatus.qml"
   ".config/quickshell/ii/services/Notifications.qml"
 )
+NL_DOTS="$HOME/.local/share/nothing-liquid/repo/dots"
 
 [[ -d "$REPO/.git" ]] || { echo "no git repo at $REPO" >&2; exit 1; }
 
@@ -118,18 +121,30 @@ for rel in "${FILES[@]}"; do
     cp -p "$src" "$dst"
 done
 
-# Regenerate patches for upstream files we modified.
+# Regenerate patches for upstream files we modified. Paths inside a patch are
+# relative to $HOME: apply with `cd ~ && patch -p0 < patches/<name>.patch`.
 for rel in "${PATCHED[@]}"; do
     src="$HOME/$rel"
-    bak="$src.bak-preclaude"
-    [[ -f "$src" && -f "$bak" ]] || continue
+    [[ -f "$src" ]] || continue
+    base="$(mktemp)"
+    if git -C "$NL_DOTS" show "HEAD:dots/$rel" > "$base" 2>/dev/null; then
+        :
+    elif [[ -f "$src.bak-preclaude" ]]; then
+        cp "$src.bak-preclaude" "$base"
+    else
+        rm -f "$base"; continue
+    fi
     out="$REPO/patches/$(basename "$rel").patch"
+    new="$(diff -u --label "$rel" --label "$rel" "$base" "$src")"
+    rm -f "$base"
     if [[ $DRY -eq 1 ]]; then
-        echo "  would refresh patch: $(basename "$rel").patch"
+        if [[ "$new" != "$(cat "$out" 2>/dev/null)" ]]; then
+            echo "  would refresh patch: $(basename "$rel").patch"; changed=1
+        fi
         continue
     fi
     mkdir -p "$(dirname "$out")"
-    diff -u "$bak" "$src" > "$out" 2>/dev/null || true
+    printf '%s\n' "$new" > "$out"
 done
 
 if [[ $DRY -eq 1 ]]; then
