@@ -96,6 +96,10 @@ FILES=(
 
   # --- see-through Chrome: the theme colour the Hyprland chroma key matches ---
   ".local/share/chrome-glass/theme/manifest.json"
+
+  # --- drifting mist over the wallpaper (a separate Quickshell config) ---
+  ".config/quickshell/mist/shaders/mist.frag"
+  ".config/quickshell/mist/shaders/mist.frag.qsb"
 )
 
 # Upstream illogical-impulse files we patched. Stored as diffs rather than
