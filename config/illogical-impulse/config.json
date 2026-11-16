@@ -1,5 +1,6 @@
 {
   "ai": {
+    "assistant": "",
     "extraModels": [
       {
         "api_format": "openai",
