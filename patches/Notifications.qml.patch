@@ -1,5 +1,5 @@
---- /home/arhaansh/.config/quickshell/ii/services/Notifications.qml.bak-preclaude	2026-09-18 04:27:52.561686848 +0530
-+++ /home/arhaansh/.config/quickshell/ii/services/Notifications.qml	2026-09-18 04:27:52.586862245 +0530
+--- .config/quickshell/ii/services/Notifications.qml
++++ .config/quickshell/ii/services/Notifications.qml
 @@ -74,6 +74,30 @@
      }
  
@@ -29,5 +29,5 @@
 +        }
 +    }
      property int unread: 0
+     property real readUntil: Date.now() // notifications after this are unseen (the lock screen lists them)
      property var filePath: Directories.notificationsPath
-     property list<Notif> list: []
