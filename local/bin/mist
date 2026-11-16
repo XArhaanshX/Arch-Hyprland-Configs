@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# mist: drifting mist over the wallpaper (Quickshell config ~/.config/quickshell/mist)
+#
+#   mist                 toggle
+#   mist on | off        start or stop it (off = fully stopped, costs nothing)
+#   mist strength 0.5    how thick it gets, 0..1 (default 0.65; remembered)
+#   mist status
+set -euo pipefail
+
+STATE="$HOME/.local/state/mist"
+running() { qs list --all 2>/dev/null | grep -q 'quickshell/mist/shell.qml'; }
+say() { printf '\033[1m·\033[0m %s\n' "$*"; }
+
+case "${1:-toggle}" in
+  on)
+    rm -f "$STATE/off"
+    running || setsid -f qs -c mist >/dev/null 2>&1
+    say "mist on"
+    ;;
+  off)
+    mkdir -p "$STATE"; touch "$STATE/off"     # remembered: login autostart skips it
+    qs -c mist kill >/dev/null 2>&1 || true
+    say "mist off"
+    ;;
+  toggle)
+    if running; then "$0" off; else "$0" on; fi
+    ;;
+  strength)
+    v="${2:?usage: mist strength 0.0-1.0}"
+    mkdir -p "$STATE"; printf '%s\n' "$v" > "$STATE/strength"   # the shell watches this file
+    say "strength $v"
+    ;;
+  autostart)   # used at login: start unless it was switched off
+    [[ -e "$STATE/off" ]] || "$0" on >/dev/null
+    ;;
+  status)
+    if running; then say "on, strength $(cat "$STATE/strength" 2>/dev/null || echo 0.65)"; else say "off"; fi
+    ;;
+  *) sed -n '2,8p' "$0"; exit 2 ;;
+esac

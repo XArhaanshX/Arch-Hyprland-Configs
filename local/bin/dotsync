@@ -79,6 +79,7 @@ FILES=(
   ".local/bin/nosleep"
   ".local/bin/nothing-liquid-rollback"
   ".local/bin/chrome-glass"
+  ".local/bin/mist"
   ".local/bin/dotsync"
 
   # --- shell (quickshell) user settings ---
