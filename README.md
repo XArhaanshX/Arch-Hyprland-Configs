@@ -234,6 +234,24 @@ shader's `bkg` together.
 
 ---
 
+## Motion
+
+Nothing Liquid's curves overshoot once and settle. The workspace slide here is
+a Hyprland 0.57 **spring** instead (`config/hypr/custom/general.lua`), so it
+wobbles both ways like jelly: about 12% past the target, 1.5% back, one last
+ripple, settled in ~0.56 s.
+
+```lua
+hl.curve("liquidWobble", { type = "spring", mass = 1, stiffness = 273, damping = 18 })
+hl.animation({ leaf = "workspaces", enabled = true, speed = 5.0, spring = "liquidWobble", style = "slide" })
+```
+
+A bezier can't do this: its overshoot passes the target once and never swings
+back. Damping sets the amount of jelly: 19.8 gives about 9% then 1%, 16.5 about
+15% then 2.3%.
+
+---
+
 ## Patches (`patches/`)
 
 Upstream files that are modified. Kept as diffs rather than whole files, so
