@@ -76,9 +76,9 @@ load_profile() {
             # Clear glass: no blur, so the wallpaper reads straight through,
             # matching kitty's opacity in this profile.
             GLASS_OPACITY=0.85
-            # Unblurred wallpaper behind code is the worst case for legibility,
-            # so this is the most conservative value of the lot.
-            TEXT_GLASS_OPACITY=0.92
+            # User asked for a fully see-through editor (2026-10-04), matching
+            # kitty's 0.80. Was 0.92 for legibility over unblurred wallpaper.
+            TEXT_GLASS_OPACITY=0.80
             ;;
         *)
             echo "wallprofile: unknown profile '$1'" >&2; exit 1 ;;
