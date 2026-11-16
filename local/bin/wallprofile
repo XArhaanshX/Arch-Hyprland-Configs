@@ -64,9 +64,8 @@ load_profile() {
             # Frosted: heavy blur behind a fairly sheer window. Slightly more
             # opaque than kitty because Dolphin has far more small text.
             GLASS_OPACITY=0.70
-            # Blur diffuses the background here, so the editor can go sheerer
-            # than it can with blur off.
-            TEXT_GLASS_OPACITY=0.85
+            # User asked for a fully see-through editor (2026-10-04); was 0.85.
+            TEXT_GLASS_OPACITY=0.70
             ;;
         default)
             BLUR_SIZE=6;   BLUR_PASSES=2
