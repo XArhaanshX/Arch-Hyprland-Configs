@@ -173,6 +173,11 @@ systemctl --user enable --now easyeffects.service
 `easyeffects.service` deliberately does **not** re-route the default sink at
 login — see [Gotchas](#gotchas).
 
+`wispd.service` is the daemon of [wisp](https://github.com/XArhaanshX/better-cluely),
+a meeting-assistant overlay. It has no `[Install]` section on purpose: it never
+starts at login, the `wisp` command starts it when needed. Its keybinds are in
+`config/hypr/custom/wisp.lua`.
+
 ---
 
 ## Patches (`patches/`)
