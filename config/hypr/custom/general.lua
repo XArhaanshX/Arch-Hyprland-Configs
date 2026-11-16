@@ -4,3 +4,8 @@
 if is_file_exists(HOME .. "/.config/hypr/custom/wallprofile.lua") then
     require("custom.wallprofile")
 end
+
+-- See-through Chrome (chrome-glass on|off); does nothing until the plugin is built.
+if is_file_exists(HOME .. "/.config/hypr/custom/chrome_glass.lua") then
+    require("custom.chrome_glass")
+end
