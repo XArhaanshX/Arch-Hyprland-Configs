@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# nosleep — keep the laptop awake: screen stays on, no idle lock/screen-off/suspend,
+#           no lid-close sleep, no sleep key
+#
+#   nosleep           toggle it on/off
+#   nosleep on        turn it on
+#   nosleep off       turn it off (normal sleep again)
+#   nosleep status    show whether it is on
+#
+# It holds a systemd-inhibit block lock in a transient user unit, so no config
+# changes and a reboot or logout turns it off by itself. It cannot stop the
+# critical-battery suspend, so keep the charger plugged in.
+
+set -euo pipefail
+
+UNIT="claude-nosleep"
+WHAT="idle:sleep:handle-lid-switch:handle-suspend-key:handle-hibernate-key"
+AC="/sys/class/power_supply/AC/online"
+BAT="/sys/class/power_supply/BAT0/capacity"
+
+usage() {
+    sed -n '2,12p' "$0" | sed 's/^# \?//'
+    exit "${1:-0}"
+}
+
+is_on() { systemctl --user is-active --quiet "$UNIT"; }
+
+warn_if_unplugged() {
+    if [[ -r $AC && $(<"$AC") == 0 ]]; then
+        local pct="?"
+        [[ -r $BAT ]] && pct=$(<"$BAT")
+        echo "nosleep: WARNING charger unplugged (battery ${pct}%) — it will still sleep when the battery goes critical"
+    fi
+}
+
+turn_on() {
+    if is_on; then
+        echo "nosleep: already on"
+    else
+        systemctl --user reset-failed "$UNIT" 2>/dev/null || true
+        systemd-run --user --quiet --unit="$UNIT" --description="Keep laptop awake (nosleep)" \
+            systemd-inhibit --what="$WHAT" --mode=block --who="nosleep" \
+            --why="Keeping the laptop awake (turn off with: nosleep off)" sleep infinity
+        sleep 0.5
+        if ! is_on; then
+            echo "nosleep: failed to start — see: journalctl --user -u $UNIT" >&2
+            exit 1
+        fi
+        echo "nosleep: on — screen stays on (no idle lock/screen-off), and idle, lid close and the sleep key will not suspend"
+    fi
+    warn_if_unplugged
+}
+
+turn_off() {
+    if is_on; then
+        systemctl --user stop "$UNIT"
+        echo "nosleep: off — normal sleep is back"
+    else
+        echo "nosleep: already off"
+    fi
+}
+
+show_status() {
+    if is_on; then echo "nosleep: on"; else echo "nosleep: off"; fi
+    warn_if_unplugged
+}
+
+case "${1:-toggle}" in
+    on)            turn_on ;;
+    off)           turn_off ;;
+    status)        show_status ;;
+    toggle)        if is_on; then turn_off; else turn_on; fi ;;
+    -h|--help)     usage 0 ;;
+    *)             echo "nosleep: unknown option '$1'" >&2; usage 1 ;;
+esac
