@@ -16,8 +16,8 @@ deliberately not tracked — see [Tracked vs generated](#tracked-vs-generated).
 | Area | What it does |
 |---|---|
 | **Wallpaper-reactive theming** | btop, cava, fzf, bat, yazi, lazygit, glow and GTK all recolour from the wallpaper |
-| **Liquid glass** | [Nothing Liquid](#nothing-liquid-liquid-glass) on top of ii, [see-through Chrome](#see-through-chrome-chrome-glass) by chroma key, [spring-wobble workspaces](#motion) |
-| **Shell scripts** | `donut`, `fx`, `theatre`, `btpair`, `bt-autoconnect`, `safe-update`, `nosleep`, `chrome-glass`, `nothing-liquid-rollback`, `dotsync` |
+| **Liquid glass** | [Nothing Liquid](#nothing-liquid-liquid-glass) on top of ii, [see-through Chrome](#see-through-chrome-chrome-glass) by chroma key, [spring-wobble workspaces](#motion), [drifting mist](#mist-mist) over the wallpaper |
+| **Shell scripts** | `donut`, `fx`, `theatre`, `btpair`, `bt-autoconnect`, `safe-update`, `nosleep`, `chrome-glass`, `mist`, `nothing-liquid-rollback`, `dotsync` |
 | **Audio** | LDAC tuning, EasyEffects crossfeed preset, Bluetooth auto-reconnect |
 | **Fixes** | GTK4 accent override, Bluetooth device filtering, portal ScreenCast pinning |
 
