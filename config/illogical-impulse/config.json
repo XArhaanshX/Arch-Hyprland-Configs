@@ -300,11 +300,16 @@
     "centerClock": true,
     "launchOnStartup": false,
     "materialShapeChars": true,
+    "notifications": {
+      "enable": true,
+      "showContent": true
+    },
     "security": {
       "requirePasswordToPower": false,
       "unlockKeyring": true
     },
     "showLockedText": true,
+    "showMedia": true,
     "useHyprlock": false
   },
   "media": {
