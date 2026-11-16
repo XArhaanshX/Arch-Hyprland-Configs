@@ -253,6 +253,38 @@ back. Damping sets the amount of jelly: 19.8 gives about 9% then 1%, 16.5 about
 
 ---
 
+## Mist (`mist`)
+
+Misty clouds drifting over the wallpaper, under every window: a separate
+Quickshell config (`config/quickshell/mist/`) with one full-screen,
+click-through layer.
+
+- **The shader** (`shaders/mist.frag`): fractal noise warped by more noise, so
+  it frays into wisps and slowly rolls instead of sliding past as a fixed
+  pattern. Three layers: mist in the valley band, thin wisps across the sky
+  and a faint haze low down, each drifting with the wind at its own speed
+  (nearer moves faster).
+- **Lit by the wallpaper:** it samples a tiny, blurred copy of the wallpaper
+  placed exactly as ii shows it (cover-scaled, `workspaceZoom`, panned by
+  workspace), so it glows orange near a sunset and goes teal over a forest.
+- **Cheap where it can be:** it renders at 1/4 resolution, and animates at
+  24 fps only while the desktop is visible. Each mist frame makes Hyprland
+  redraw every glass window over it (about 1.2% GPU per frame per second), so
+  behind windows it holds still, which behind frosted glass nobody notices.
+  It hides while a window is fullscreen.
+
+```fish
+mist                 # toggle
+mist on / off        # off is remembered, and skips the login autostart
+mist strength 0.5    # 0..1, default 0.65
+mist status
+```
+
+After editing the shader:
+`/usr/lib/qt6/bin/qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o mist.frag.qsb mist.frag`
+
+---
+
 ## Patches (`patches/`)
 
 Upstream files that are modified. Kept as diffs rather than whole files, so
