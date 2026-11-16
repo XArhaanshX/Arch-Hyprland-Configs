@@ -88,6 +88,7 @@ FILES=(
   ".config/hypr/custom/execs.lua"
   ".config/hypr/custom/rules.lua"
   ".config/hypr/custom/variables.lua"
+  ".config/hypr/custom/wisp.lua"
 )
 
 # Upstream illogical-impulse files we patched. Stored as diffs rather than
