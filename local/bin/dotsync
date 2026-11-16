@@ -99,6 +99,7 @@ FILES=(
 PATCHED=(
   ".config/quickshell/ii/services/BluetoothStatus.qml"
   ".config/quickshell/ii/services/Notifications.qml"
+  ".config/hypr/hyprland/general.lua"
 )
 NL_DOTS="$HOME/.local/share/nothing-liquid/repo/dots"
 
