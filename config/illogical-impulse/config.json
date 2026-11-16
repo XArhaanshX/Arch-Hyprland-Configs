@@ -84,7 +84,8 @@
       "enable": false,
       "maxAllowed": 99,
       "maxAllowedIncrease": 10
-    }
+    },
+    "volumeStep": 2
   },
   "background": {
     "hideWhenFullscreen": true,
@@ -284,6 +285,7 @@
     "antiFlashbang": {
       "enable": false
     },
+    "brightnessStep": 5,
     "night": {
       "automatic": true,
       "colorTemperature": 5000,
