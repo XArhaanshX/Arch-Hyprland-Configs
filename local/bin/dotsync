@@ -91,6 +91,7 @@ FILES=(
   ".config/hypr/custom/rules.lua"
   ".config/hypr/custom/variables.lua"
   ".config/hypr/custom/wisp.lua"
+  ".config/hypr/custom/chrome_glass.lua"
 
   # --- see-through Chrome: the theme colour the Hyprland chroma key matches ---
   ".local/share/chrome-glass/theme/manifest.json"
