@@ -337,6 +337,11 @@ installed, three of them declare `ScreenCast`. `hyprland-portals.conf` pins it
 explicitly, otherwise the choice depends on backend ordering and screen sharing
 silently breaks.
 
+**Two shells after a restart.** `qs -c ii kill` doesn't always stop the shell
+started at login. Two instances then fight over the notification server and the
+polkit agent (and pop the conflict dialog twice). `qs list --all` shows them;
+kill the old PID and start the shell once more.
+
 ---
 
 ## Notes if reusing this
